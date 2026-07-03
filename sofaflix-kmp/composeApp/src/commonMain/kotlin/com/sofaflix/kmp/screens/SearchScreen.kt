@@ -232,6 +232,7 @@ fun SearchScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(horizontal = 20.dp)
                     .padding(top = 16.dp)
             ) {

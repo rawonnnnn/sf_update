@@ -75,6 +75,7 @@ fun LoggedInContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .padding(horizontal = 20.dp)
                 .padding(top = 16.dp, bottom = 18.dp)
         ) {
@@ -331,6 +332,7 @@ fun AuthContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState()),
         contentAlignment = Alignment.Center
     ) {

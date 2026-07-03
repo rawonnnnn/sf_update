@@ -178,6 +178,7 @@ fun DetailScreen(
                                 onClick = onBackClick,
                                 modifier = Modifier
                                     .align(Alignment.TopStart)
+                                    .statusBarsPadding()
                                     .padding(start = 18.dp, top = 20.dp)
                                     .size(38.dp)
                                     .clip(RoundedCornerShape(19.dp))
@@ -191,6 +192,7 @@ fun DetailScreen(
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
+                                    .statusBarsPadding()
                                     .padding(end = 18.dp, top = 20.dp)
                                     .size(38.dp)
                                     .clip(RoundedCornerShape(19.dp))
