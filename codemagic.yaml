@@ -1,0 +1,28 @@
+workflows:
+  kmp-ios-debug:
+    name: SofaFlix KMP iOS Debug Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      java: 17
+      xcode: latest
+    triggering:
+      events:
+        - push
+    scripts:
+      - name: Make Gradlew executable
+        script: |
+          chmod +x sofaflix-kmp/gradlew
+      - name: Build iOS App (No Signing)
+        script: |
+          cd sofaflix-kmp/iosApp
+          xcodebuild -project iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphoneos \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+    artifacts:
+      - sofaflix-kmp/iosApp/build/Build/Products/Debug-iphoneos/*.app
