@@ -36,6 +36,7 @@ class iOSMessageHandler(
     }
 }
 
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 @Composable
 actual fun WatchPlayer(
     movie: Movie,

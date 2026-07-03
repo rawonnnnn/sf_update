@@ -619,7 +619,7 @@ fun mockRatings(slug: String): Ratings {
     slug.forEach { ch -> hash = ch.code + ((hash shl 5) - hash) }
     val abs = kotlin.math.abs(hash)
     return Ratings(
-        imdb = String.format("%.1f", 7.2 + (abs % 16) / 10.0),
+        imdb = "${kotlin.math.round((7.2 + (abs % 16) / 10.0) * 10) / 10.0}",
         tmdb = "${74 + kotlin.math.abs((hash shr 2) % 20)}",
         rotten = "${78 + kotlin.math.abs((hash shr 4) % 18)}%",
         metacritic = "${68 + kotlin.math.abs((hash shr 6) % 22)}",
