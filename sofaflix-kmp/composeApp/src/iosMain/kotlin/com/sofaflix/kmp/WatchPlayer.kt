@@ -87,6 +87,38 @@ actual fun WatchPlayer(
                         iOSMessageHandler(onPlayNextEpisode, onUpdateProgress),
                         "App"
                     )
+                    val playsinlineScript = platform.WebKit.WKUserScript(
+                        source = """
+                            (function() {
+                                function applyPlaysInline(video) {
+                                    if (video && !video.hasAttribute('playsinline')) {
+                                        video.setAttribute('playsinline', 'true');
+                                        video.setAttribute('webkit-playsinline', 'true');
+                                        video.setAttribute('x5-playsinline', 'true');
+                                    }
+                                }
+                                const observer = new MutationObserver((mutations) => {
+                                    mutations.forEach((mutation) => {
+                                        mutation.addedNodes.forEach((node) => {
+                                            if (node.tagName === 'VIDEO') {
+                                                applyPlaysInline(node);
+                                            } else if (node.querySelectorAll) {
+                                                node.querySelectorAll('video').forEach(applyPlaysInline);
+                                            }
+                                        });
+                                    });
+                                });
+                                observer.observe(document.documentElement, {
+                                    childList: true,
+                                    subtree: true
+                                });
+                                document.querySelectorAll('video').forEach(applyPlaysInline);
+                            })();
+                        """.trimIndent(),
+                        injectionTime = platform.WebKit.WKUserScriptInjectionTimeAtDocumentStart,
+                        forMainFrameOnly = false
+                    )
+                    addUserScript(playsinlineScript)
                 }
                 userContentController = controller
                 allowsInlineMediaPlayback = true
@@ -1064,6 +1096,11 @@ private fun generateArtplayerHtml(
           });
 
           art.on('ready', () => {
+            if (art.video) {
+              art.video.setAttribute('playsinline', 'true');
+              art.video.setAttribute('webkit-playsinline', 'true');
+              art.video.setAttribute('x5-playsinline', 'true');
+            }
             var savedTime = $savedTime;
             if (savedTime > 0) {
               art.currentTime = savedTime;
