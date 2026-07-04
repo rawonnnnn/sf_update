@@ -58,10 +58,13 @@ fun App() {
     var activeWatchEpisode by remember { mutableStateOf<Episode?>(null) }
     var activeWatchDetail by remember { mutableStateOf<MovieDetail?>(null) }
 
+    var currentLanguage by remember { mutableStateOf("vi") }
+
     LaunchedEffect(Unit) {
         token = AppPreferences.getString("sf:token", "")
         userProfileName = AppPreferences.getString("sf:user_name", "")
         api.token = token
+        currentLanguage = AppPreferences.getString("sf:language", "vi")
     }
 
     fun handleLoginSuccess(newToken: String, newName: String) {
@@ -82,15 +85,21 @@ fun App() {
         currentScreen = Screen.Profile
     }
 
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = Color(0xFF1CC749),
-            background = Color(0xFF191B24),
-            surface = Color(0xFF20232D),
-            onBackground = Color.White,
-            onSurface = Color.White
-        )
+    val appColors = remember { AppColors() }
+
+    CompositionLocalProvider(
+        LocalAppColors provides appColors,
+        LocalLanguage provides currentLanguage
     ) {
+        MaterialTheme(
+            colorScheme = darkColorScheme(
+                primary = appColors.primary,
+                background = appColors.background,
+                surface = appColors.surface,
+                onBackground = appColors.textPrimary,
+                onSurface = appColors.textPrimary
+            )
+        ) {
         val uriHandler = LocalUriHandler.current
 
         if (activeWatchMovie != null && activeWatchEpisode != null && activeWatchDetail != null) {
@@ -174,6 +183,11 @@ fun App() {
                             api = api,
                             token = token,
                             userProfileName = userProfileName,
+                            currentLanguage = currentLanguage,
+                            onLanguageChange = { lang ->
+                                currentLanguage = lang
+                                AppPreferences.putString("sf:language", lang)
+                            },
                             onLoginSuccess = { t, n -> handleLoginSuccess(t, n) },
                             onLogout = { handleLogout() }
                         )
@@ -219,6 +233,7 @@ fun App() {
                     )
                 }
             }
+            }
         }
     }
 }
@@ -251,11 +266,12 @@ fun FloatingBottomNavigation(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val lang = LocalLanguage.current
             val items = listOf(
-                Triple("Trang chủ", Screen.Home, Icons.Default.Home),
-                Triple("Tìm kiếm", Screen.Search, Icons.Default.Search),
-                Triple("Thư viện", Screen.Library, Icons.Default.List),
-                Triple("Cá nhân", Screen.Profile, Icons.Default.Person)
+                Triple(Lang.t("home", lang), Screen.Home, Icons.Default.Home),
+                Triple(Lang.t("search", lang), Screen.Search, Icons.Default.Search),
+                Triple(Lang.t("library", lang), Screen.Library, Icons.Default.List),
+                Triple(Lang.t("profile", lang), Screen.Profile, Icons.Default.Person)
             )
 
             items.forEach { (label, screen, icon) ->

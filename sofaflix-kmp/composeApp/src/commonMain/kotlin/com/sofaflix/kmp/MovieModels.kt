@@ -14,7 +14,8 @@ data class Movie(
     val lang: String,
     val year: String,
     val tmdbLogo: String = "",
-    val progress: Double = 0.0
+    val progress: Double = 0.0,
+    val type: String = ""
 )
 
 @Serializable

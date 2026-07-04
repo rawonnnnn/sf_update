@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.sofaflix.kmp.Movie
 import com.sofaflix.kmp.SofaFlixApi
+import com.sofaflix.kmp.StorageHelpers
+import com.sofaflix.kmp.LocalLanguage
+import com.sofaflix.kmp.Lang
 import com.sofaflix.kmp.firstText
 import com.sofaflix.kmp.jsonObjectOrNull
 import kotlinx.coroutines.launch
@@ -40,6 +43,7 @@ fun LibraryScreen(
     token: String,
     onMovieClick: (String) -> Unit
 ) {
+    val lang = LocalLanguage.current
     var activeTab by remember { mutableStateOf("saved") } // saved or history
     var favoritesList by remember { mutableStateOf<List<Movie>>(emptyList()) }
     var historyList by remember { mutableStateOf<List<Movie>>(emptyList()) }
@@ -49,7 +53,7 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
     
     fun mapJsonToMovie(json: JsonElement): Movie {
-        val obj = json.jsonObjectOrNull ?: return Movie("", "Chưa rõ", "", "", "", "", "", "", "", "")
+        val obj = json.jsonObjectOrNull ?: return Movie("", Lang.t("unknown", lang), "", "", "", "", "", "", "", "")
         val slug = obj.firstText("movieSlug", "slug", "id", "_id")
         val name = obj.firstText("name", "title")
         val thumb = obj.firstText("thumb_url", "thumbnail", "image", "poster_url", "poster")
@@ -57,6 +61,7 @@ fun LibraryScreen(
         val quality = obj.firstText("quality")
         val lang = obj.firstText("lang")
         val year = obj.firstText("year")
+        val type = obj.firstText("type")
         return Movie(
             slug = slug,
             name = name,
@@ -67,15 +72,15 @@ fun LibraryScreen(
             quality = quality,
             lang = lang,
             year = year,
-            tmdbLogo = ""
+            tmdbLogo = "",
+            type = type
         )
     }
     
     fun loadData() {
         if (token.isBlank()) {
-            // For Guest users, pull from GuestStorage memory cache
-            favoritesList = GuestStorage.favorites.toList()
-            historyList = GuestStorage.history.toList()
+            favoritesList = StorageHelpers.getLocalFavorites()
+            historyList = StorageHelpers.getWatchHistory()
             return
         }
         
@@ -88,7 +93,7 @@ fun LibraryScreen(
                 favoritesList = favs
                 historyList = hists
             } catch (e: Exception) {
-                errorMsg = e.message ?: "Lỗi tải thư viện"
+                errorMsg = e.message ?: Lang.t("library_error", lang)
             } finally {
                 loading = false
             }
@@ -100,9 +105,9 @@ fun LibraryScreen(
     }
     
     fun handleRemoveFavorite(movie: Movie) {
+        StorageHelpers.toggleFavorite(movie)
         if (token.isBlank()) {
-            GuestStorage.favorites.removeAll { it.slug == movie.slug }
-            favoritesList = GuestStorage.favorites.toList()
+            favoritesList = StorageHelpers.getLocalFavorites()
         } else {
             favoritesList = favoritesList.filter { it.slug != movie.slug }
             scope.launch {
@@ -116,9 +121,9 @@ fun LibraryScreen(
     }
     
     fun handleRemoveHistory(slug: String) {
+        StorageHelpers.removeHistory(slug)
         if (token.isBlank()) {
-            GuestStorage.history.removeAll { it.slug == slug }
-            historyList = GuestStorage.history.toList()
+            historyList = StorageHelpers.getWatchHistory()
         } else {
             historyList = historyList.filter { it.slug != slug }
             scope.launch {
@@ -148,7 +153,7 @@ fun LibraryScreen(
                     .padding(top = 16.dp, bottom = 14.dp)
             ) {
                 Text(
-                    text = "Thư viện",
+                    text = Lang.t("library", lang),
                     color = Color.White,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.ExtraBold,
@@ -161,12 +166,12 @@ fun LibraryScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     TabPill(
-                        label = "Đã lưu",
+                        label = Lang.t("saved", lang),
                         isActive = activeTab == "saved",
                         onClick = { activeTab = "saved" }
                     )
                     TabPill(
-                        label = "Lịch sử",
+                        label = Lang.t("history", lang),
                         isActive = activeTab == "history",
                         onClick = { activeTab = "history" }
                     )
@@ -195,7 +200,7 @@ fun LibraryScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = if (activeTab == "saved") "Thư viện phim đã lưu trống." else "Chưa có lịch sử xem phim.",
+                            text = if (activeTab == "saved") Lang.t("empty_saved", lang) else Lang.t("empty_history", lang),
                             color = Color.White.copy(alpha = 0.48f),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,

@@ -104,4 +104,9 @@ object StorageHelpers {
         val jsonStr = Json.encodeToString(ListSerializer(String.serializer()), set.toList())
         AppPreferences.putString("sf:watched_episodes:$slug", jsonStr)
     }
+
+    fun clearCache() {
+        AppPreferences.remove("sf:favorites")
+        AppPreferences.remove("sf:watch_history")
+    }
 }

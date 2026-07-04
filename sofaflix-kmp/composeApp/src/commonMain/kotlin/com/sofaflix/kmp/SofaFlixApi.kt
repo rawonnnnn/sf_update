@@ -63,8 +63,40 @@ class SofaFlixApi(
         return movieList("/api/v1/api/nam/$year", mapOf("page" to "$page", "limit" to "$limit"))
     }
 
-    suspend fun search(keyword: String, page: Int = 1, limit: Int = 30): List<Movie> {
-        return movieList("/api/v1/api/tim-kiem", mapOf("keyword" to keyword, "page" to "$page", "limit" to "$limit"))
+    suspend fun search(
+        keyword: String,
+        page: Int = 1,
+        limit: Int = 30,
+        genre: String = "",
+        country: String = "",
+        year: String = ""
+    ): List<Movie> {
+        val params = mutableMapOf("keyword" to keyword, "page" to "$page", "limit" to "$limit")
+        if (genre.isNotBlank()) params["category"] = genre
+        if (country.isNotBlank()) params["country"] = country
+        if (year.isNotBlank()) params["year"] = year
+        return movieList("/api/v1/api/tim-kiem", params)
+    }
+
+    suspend fun discover(
+        type: String, // all, single, series
+        genre: String,
+        country: String,
+        year: String,
+        page: Int,
+        limit: Int
+    ): List<Movie> {
+        val params = mutableMapOf("page" to "$page", "limit" to "$limit")
+        if (genre.isNotBlank()) params["category"] = genre
+        if (country.isNotBlank()) params["country"] = country
+        if (year.isNotBlank()) params["year"] = year
+
+        val path = when (type) {
+            "single" -> "/api/v1/api/danh-sach/phim-le"
+            "series" -> "/api/v1/api/danh-sach/phim-bo"
+            else -> "/api/danh-sach/phim-moi-cap-nhat-v3"
+        }
+        return movieList(path, params)
     }
 
     suspend fun genres(): List<Pair<String, String>> {
@@ -425,7 +457,8 @@ class SofaFlixApi(
             quality = json.firstText("quality"),
             lang = json.firstText("lang"),
             year = json.firstText("year"),
-            tmdbLogo = tmdbLogoUrl(json.firstText("tmdb_logo", "tmdbLogo", "logo_url", "logoUrl", "logo_path"))
+            tmdbLogo = tmdbLogoUrl(json.firstText("tmdb_logo", "tmdbLogo", "logo_url", "logoUrl", "logo_path")),
+            type = json.firstText("type")
         )
     }
 

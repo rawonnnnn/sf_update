@@ -100,28 +100,46 @@ fun MovieCard(
 }
 
 @Composable
-fun SectionHeader(title: String) {
-    Column(
+fun SectionHeader(
+    title: String,
+    onSeeAllClick: (() -> Unit)? = null
+) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = 24.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = title,
-            color = Color.White,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Box(
-            modifier = Modifier
-                .width(32.dp)
-                .height(3.dp)
-                .clip(RoundedCornerShape(1.5.dp))
-                .background(Color(0xFF1CC749))
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+        Column {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .width(32.dp)
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .background(Color(0xFF1CC749))
+            )
+        }
+        if (onSeeAllClick != null) {
+            Text(
+                text = "Xem tất cả",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable { onSeeAllClick() }
+                    .padding(vertical = 4.dp, horizontal = 8.dp)
+            )
+        }
     }
+    Spacer(modifier = Modifier.height(16.dp))
 }
 
 @Composable

@@ -29,6 +29,8 @@ import androidx.compose.ui.window.Dialog
 import coil3.compose.AsyncImage
 import com.sofaflix.kmp.Movie
 import com.sofaflix.kmp.SofaFlixApi
+import com.sofaflix.kmp.LocalLanguage
+import com.sofaflix.kmp.Lang
 import com.sofaflix.kmp.ui.MovieCard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,6 +44,7 @@ fun SearchScreen(
     initialCategoryName: String?,
     onMovieClick: (String) -> Unit
 ) {
+    val lang = LocalLanguage.current
     var query by remember { mutableStateOf("") }
     var debouncedQuery by remember { mutableStateOf("") }
     
@@ -65,8 +68,8 @@ fun SearchScreen(
     var loading by remember { mutableStateOf(false) }
     var hasMore by remember { mutableStateOf(true) }
     
-    // Dialog / Picker state
-    var activePickerType by remember { mutableStateOf<String?>(null) } // type, genre, country, year
+    // Filter collapse/expand state
+    var isFiltersExpanded by remember { mutableStateOf(false) }
     
     val scope = rememberCoroutineScope()
     
@@ -75,6 +78,7 @@ fun SearchScreen(
         if (initialCategorySlug != null) {
             query = ""
             debouncedQuery = ""
+            isFiltersExpanded = true
             when (initialCategoryKind) {
                 "genre" -> {
                     selectedGenre = initialCategorySlug
@@ -133,32 +137,32 @@ fun SearchScreen(
                 val limit = 24
                 
                 if (debouncedQuery.trim().isNotBlank()) {
-                    items = api.search(debouncedQuery.trim(), pageNum, limit)
+                    items = api.search(
+                        keyword = debouncedQuery.trim(),
+                        page = pageNum,
+                        limit = limit,
+                        genre = selectedGenre,
+                        country = selectedCountry,
+                        year = selectedYear
+                    )
                 } else {
-                    if (selectedType == "single") {
-                        items = api.listByType("phim-le", pageNum, limit)
-                    } else if (selectedType == "series") {
-                        items = api.listByType("phim-bo", pageNum, limit)
-                    } else {
-                        if (selectedGenre.isNotBlank()) {
-                            items = api.genre(selectedGenre, pageNum, limit)
-                        } else if (selectedCountry.isNotBlank()) {
-                            items = api.country(selectedCountry, pageNum, limit)
-                        } else if (selectedYear.isNotBlank()) {
-                            items = api.year(selectedYear, pageNum, limit)
-                        } else {
-                            items = api.latestV3(pageNum, limit, mapOf("sort_field" to "view", "sort_type" to "desc"))
-                        }
-                    }
+                    items = api.discover(
+                        type = selectedType,
+                        genre = selectedGenre,
+                        country = selectedCountry,
+                        year = selectedYear,
+                        page = pageNum,
+                        limit = limit
+                    )
                 }
                 
                 // Client-side filtering when searching with filters active
                 if (debouncedQuery.trim().isNotBlank()) {
                     var filtered = items
                     if (selectedType == "single") {
-                        // In v3, single/series type check can be inferred or checked client side
+                        filtered = items.filter { it.type == "single" || it.type == "movie" || it.type == "phim-le" }
                     } else if (selectedType == "series") {
-                        // In v3, series check
+                        filtered = items.filter { it.type == "series" || it.type == "tv" || it.type == "phim-bo" }
                     }
                     items = filtered
                 }
@@ -189,16 +193,16 @@ fun SearchScreen(
     }
     
     // Build path string
-    val pathText = remember(selectedType, selectedGenre, selectedCountry, selectedYear, allGenres, allCountries) {
+    val pathText = remember(lang, selectedType, selectedGenre, selectedCountry, selectedYear, allGenres, allCountries) {
         val parts = mutableListOf("SofaFlix")
         when (selectedType) {
-            "single" -> parts.add("Phim lẻ")
-            "series" -> parts.add("Phim bộ")
-            else -> parts.add("Tất cả")
+            "single" -> parts.add(Lang.t("movies", lang))
+            "series" -> parts.add(Lang.t("series", lang))
+            else -> parts.add(if (lang == "vi") "Tất cả" else "All")
         }
         if (selectedGenre.isNotBlank()) parts.add(getGenreName(selectedGenre).ifBlank { selectedGenre })
         if (selectedCountry.isNotBlank()) parts.add(getCountryName(selectedCountry).ifBlank { selectedCountry })
-        if (selectedYear.isNotBlank()) parts.add("Năm $selectedYear")
+        if (selectedYear.isNotBlank()) parts.add(if (lang == "vi") "Năm $selectedYear" else "Year $selectedYear")
         parts.joinToString("  •  ").uppercase()
     }
     
@@ -237,7 +241,7 @@ fun SearchScreen(
                     .padding(top = 16.dp)
             ) {
                 Text(
-                    text = "Tìm kiếm",
+                    text = Lang.t("search", lang),
                     color = Color.White,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.ExtraBold,
@@ -298,7 +302,7 @@ fun SearchScreen(
                     }
                     if (query.isEmpty()) {
                         Text(
-                            text = "Tìm tên phim, đạo diễn, diễn viên...",
+                            text = Lang.t("search_placeholder", lang),
                             color = Color.White.copy(alpha = 0.38f),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -307,41 +311,96 @@ fun SearchScreen(
                     }
                 }
                 
-                Text(
-                    text = "Khám phá",
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier.padding(top = 22.dp, bottom = 12.dp)
-                )
-                
-                // Filter pills
                 Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .clickable { isFiltersExpanded = !isFiltersExpanded }
+                        .padding(top = 22.dp, bottom = 12.dp)
                 ) {
-                    FilterPill(
-                        label = when (selectedType) {
-                            "single" -> "Phim lẻ"
-                            "series" -> "Phim bộ"
-                            else -> "Định dạng"
-                        },
-                        onClick = { activePickerType = "type" }
+                    Text(
+                        text = Lang.t("filters", lang),
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
-                    FilterPill(
-                        label = if (selectedGenre.isNotBlank()) getGenreName(selectedGenre) else "Thể loại",
-                        onClick = { activePickerType = "genre" }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isFiltersExpanded) "▲" else "▼",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 12.sp
                     )
-                    FilterPill(
-                        label = if (selectedCountry.isNotBlank()) getCountryName(selectedCountry) else "Quốc gia",
-                        onClick = { activePickerType = "country" }
-                    )
-                    FilterPill(
-                        label = if (selectedYear.isNotBlank()) "Năm $selectedYear" else "Năm",
-                        onClick = { activePickerType = "year" }
-                    )
+                }
+
+                if (isFiltersExpanded) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp)
+                    ) {
+                        // 1. Định dạng
+                        FilterRow(label = Lang.t("format", lang)) {
+                            val types = listOf(
+                                "all" to (if (lang == "vi") "Tất cả" else "All"),
+                                "single" to Lang.t("movies", lang),
+                                "series" to Lang.t("series", lang)
+                            )
+                            types.forEach { (value, name) ->
+                                FilterChip(
+                                    label = name,
+                                    isActive = selectedType == value,
+                                    onClick = { selectedType = value }
+                                )
+                            }
+                        }
+                        
+                        // 2. Thể loại
+                        FilterRow(label = Lang.t("genre_label", lang)) {
+                            FilterChip(
+                                label = if (lang == "vi") "Tất cả" else "All",
+                                isActive = selectedGenre.isEmpty(),
+                                onClick = { selectedGenre = "" }
+                            )
+                            allGenres.forEach { pair ->
+                                FilterChip(
+                                    label = pair.first,
+                                    isActive = selectedGenre == pair.second,
+                                    onClick = { selectedGenre = pair.second }
+                                )
+                            }
+                        }
+
+                        // 3. Quốc gia
+                        FilterRow(label = Lang.t("country_label", lang)) {
+                            FilterChip(
+                                label = if (lang == "vi") "Tất cả" else "All",
+                                isActive = selectedCountry.isEmpty(),
+                                onClick = { selectedCountry = "" }
+                            )
+                            allCountries.forEach { pair ->
+                                FilterChip(
+                                    label = pair.first,
+                                    isActive = selectedCountry == pair.second,
+                                    onClick = { selectedCountry = pair.second }
+                                )
+                            }
+                        }
+
+                        // 4. Năm phát hành
+                        FilterRow(label = Lang.t("year_label", lang)) {
+                            FilterChip(
+                                label = if (lang == "vi") "Tất cả" else "All",
+                                isActive = selectedYear.isEmpty(),
+                                onClick = { selectedYear = "" }
+                            )
+                            yearsList.forEach { yr ->
+                                FilterChip(
+                                    label = yr,
+                                    isActive = selectedYear == yr,
+                                    onClick = { selectedYear = yr }
+                                )
+                            }
+                        }
+                    }
                 }
                 
                 // Active path summary
@@ -350,7 +409,7 @@ fun SearchScreen(
                     color = Color.White.copy(alpha = 0.48f),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier.padding(top = 14.dp, bottom = 10.dp)
+                    modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
                 )
             }
             
@@ -364,7 +423,7 @@ fun SearchScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "Không tìm thấy phim phù hợp.",
+                            text = Lang.t("no_movies_found", lang),
                             color = Color.White.copy(alpha = 0.48f),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
@@ -400,82 +459,62 @@ fun SearchScreen(
                 }
             }
         }
-        
-        // Custom Dialog Modal Pickers
-        activePickerType?.let { pickerType ->
-            val title = when (pickerType) {
-                "type" -> "Định dạng phim"
-                "genre" -> "Chọn thể loại"
-                "country" -> "Chọn quốc gia"
-                else -> "Chọn năm phát hành"
-            }
-            
-            val options = when (pickerType) {
-                "type" -> listOf("all" to "Tất cả định dạng", "single" to "Phim lẻ (Movies)", "series" to "Phim bộ (Series)")
-                "genre" -> listOf("" to "Tất cả thể loại") + allGenres.map { it.second to it.first }
-                "country" -> listOf("" to "Tất cả quốc gia") + allCountries.map { it.second to it.first }
-                else -> listOf("" to "Tất cả các năm") + yearsList.map { it to "Năm $it" }
-            }
-            
-            val selectedValue = when (pickerType) {
-                "type" -> selectedType
-                "genre" -> selectedGenre
-                "country" -> selectedCountry
-                else -> selectedYear
-            }
-            
-            val onSelect: (String) -> Unit = { valSelected ->
-                when (pickerType) {
-                    "type" -> selectedType = valSelected
-                    "genre" -> selectedGenre = valSelected
-                    "country" -> selectedCountry = valSelected
-                    else -> selectedYear = valSelected
-                }
-                activePickerType = null
-            }
-            
-            PickerDialog(
-                title = title,
-                options = options,
-                selectedValue = selectedValue,
-                onDismiss = { activePickerType = null },
-                onSelect = onSelect
-            )
-        }
     }
 }
 
 @Composable
-fun FilterPill(
+fun FilterRow(
     label: String,
+    content: @Composable RowScope.() -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.42f),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(84.dp)
+        )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
+        )
+    }
+}
+
+@Composable
+fun FilterChip(
+    label: String,
+    isActive: Boolean,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFF20232D))
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (isActive) Color(0xFF1CC749).copy(alpha = 0.08f) else Color.Transparent)
+            .border(
+                width = 1.dp,
+                color = if (isActive) Color(0xFF1CC749).copy(alpha = 0.3f) else Color.Transparent,
+                shape = RoundedCornerShape(6.dp)
+            )
             .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = label,
-                color = Color.White,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "▾",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 11.sp
-            )
-        }
+        Text(
+            text = label,
+            color = if (isActive) Color(0xFF1CC749) else Color.White.copy(alpha = 0.72f),
+            fontSize = 13.sp,
+            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
+        )
     }
 }
 
@@ -515,103 +554,5 @@ fun MovieGridItem(movie: Movie, onClick: () -> Unit) {
             color = Color.White.copy(alpha = 0.48f),
             fontSize = 11.sp
         )
-    }
-}
-
-@Composable
-fun PickerDialog(
-    title: String,
-    options: List<Pair<String, String>>, // value to label
-    selectedValue: String,
-    onDismiss: () -> Unit,
-    onSelect: (String) -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF191B24)),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.7f)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                // Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = title,
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-                
-                Divider(color = Color.White.copy(alpha = 0.08f))
-                
-                // Options list
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(vertical = 8.dp)
-                ) {
-                    options.forEach { (value, label) ->
-                        val isSelected = selectedValue == value
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(if (isSelected) Color(0xFF1CC749).copy(alpha = 0.06f) else Color.Transparent)
-                                .clickable { onSelect(value) }
-                                .padding(horizontal = 22.dp, vertical = 14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = label,
-                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.68f),
-                                fontSize = 15.sp,
-                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Bold
-                            )
-                            if (isSelected) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .background(Color(0xFF1CC749), RoundedCornerShape(9.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "✓",
-                                        color = Color.White,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }

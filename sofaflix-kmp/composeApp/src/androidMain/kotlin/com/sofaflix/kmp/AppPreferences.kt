@@ -19,4 +19,9 @@ actual object AppPreferences {
         if (!::sharedPrefs.isInitialized) return
         sharedPrefs.edit().putString(key, value).apply()
     }
+
+    actual fun remove(key: String) {
+        if (!::sharedPrefs.isInitialized) return
+        sharedPrefs.edit().remove(key).apply()
+    }
 }

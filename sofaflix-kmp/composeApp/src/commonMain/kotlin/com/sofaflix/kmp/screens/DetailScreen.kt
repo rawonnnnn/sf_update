@@ -57,6 +57,7 @@ fun DetailScreen(
 
     val scope = rememberCoroutineScope()
     val watchedSet = remember { mutableStateListOf<String>() }
+    val lang = LocalLanguage.current
 
     fun loadData() {
         loading = true
@@ -65,7 +66,21 @@ fun DetailScreen(
             try {
                 val detailData = api.detail(movieSlug)
                 detail = detailData
-                isFav = StorageHelpers.isMovieFavorite(movieSlug)
+                var fav = StorageHelpers.isMovieFavorite(movieSlug)
+                if (token.isNotBlank()) {
+                    try {
+                        val serverFavs = api.getFavorites()
+                        val isServerFav = serverFavs.any {
+                            val obj = it.jsonObjectOrNull
+                            val slug = obj?.firstText("movieSlug", "slug", "id", "_id")
+                            slug == movieSlug
+                        }
+                        fav = isServerFav
+                    } catch (e: Exception) {
+                        // ignore server error, fallback to local
+                    }
+                }
+                isFav = fav
                 
                 // Get watched history and populate watchedSet
                 val localHistory = StorageHelpers.getWatchHistory()
@@ -86,7 +101,7 @@ fun DetailScreen(
                     loadingComments = false
                 }
             } catch (e: Exception) {
-                errorMsg = e.message ?: "Có lỗi xảy ra khi tải chi tiết."
+                errorMsg = e.message ?: Lang.t("loading_detail_error", lang)
             } finally {
                 loading = false
             }
@@ -113,7 +128,7 @@ fun DetailScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Color(0xFF1CC749))
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Đang tải chi tiết...", color = Color.Gray, fontSize = 14.sp)
+                        Text(Lang.t("loading_detail", lang), color = Color.Gray, fontSize = 14.sp)
                     }
                 }
             } else if (errorMsg != null) {
@@ -131,7 +146,7 @@ fun DetailScreen(
                             onClick = { loadData() },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1CC749))
                         ) {
-                            Text("Thử lại", color = Color.White)
+                            Text(Lang.t("try_again", lang), color = Color.White)
                         }
                     }
                 }
@@ -241,7 +256,7 @@ fun DetailScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     val hasWatchedAny = watchedSet.isNotEmpty()
-                                    val resumeText = if (hasWatchedAny) "Xem tiếp" else "Xem ngay"
+                                    val resumeText = if (hasWatchedAny) Lang.t("xem_tiep", lang) else Lang.t("xem_ngay", lang)
                                     
                                     Button(
                                         onClick = {
@@ -257,6 +272,20 @@ fun DetailScreen(
                                             
                                             if (ep != null) {
                                                 StorageHelpers.addToHistory(movie, ep.name)
+                                                if (token.isNotBlank()) {
+                                                    scope.launch {
+                                                        try {
+                                                            api.addToHistory(
+                                                                slug = movie.slug,
+                                                                name = movie.name,
+                                                                thumbUrl = movie.thumbUrl.ifBlank { movie.posterUrl },
+                                                                episode = ep.name
+                                                            )
+                                                        } catch (e: Exception) {
+                                                            // Ignore
+                                                        }
+                                                    }
+                                                }
                                                 onPlayClick(movie, ep, movieDetail)
                                             }
                                         },
@@ -286,6 +315,19 @@ fun DetailScreen(
                                             .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(24.dp))
                                             .clickable {
                                                 isFav = StorageHelpers.toggleFavorite(movie)
+                                                if (token.isNotBlank()) {
+                                                    scope.launch {
+                                                        try {
+                                                            api.toggleFavorite(
+                                                                slug = movie.slug,
+                                                                name = movie.name,
+                                                                thumbUrl = movie.thumbUrl.ifBlank { movie.posterUrl }
+                                                            )
+                                                        } catch (e: Exception) {
+                                                            // Ignore
+                                                        }
+                                                    }
+                                                }
                                             },
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -339,12 +381,12 @@ fun DetailScreen(
                             
                             // Crew Details
                             if (movieDetail.directors.isNotEmpty()) {
-                                CrewLine("Đạo diễn: ", movieDetail.directors.joinToString(", "))
+                                CrewLine(Lang.t("director", lang), movieDetail.directors.joinToString(", "))
                             }
-                            val writersVal = if (movieDetail.writers.isNotEmpty()) movieDetail.writers.joinToString(", ") else "Đang cập nhật"
-                            CrewLine("Biên kịch: ", writersVal)
+                            val writersVal = if (movieDetail.writers.isNotEmpty()) movieDetail.writers.joinToString(", ") else Lang.t("updating", lang)
+                            CrewLine(Lang.t("writer", lang), writersVal)
                             if (movieDetail.actors.isNotEmpty()) {
-                                CrewLine("Diễn viên: ", movieDetail.actors.take(5).joinToString(", "))
+                                CrewLine(Lang.t("actor", lang), movieDetail.actors.take(5).joinToString(", "))
                             }
                             
                             Spacer(modifier = Modifier.height(12.dp))
@@ -362,7 +404,7 @@ fun DetailScreen(
                                 
                                 if (movieDetail.description.length > 120) {
                                     Text(
-                                        text = if (descExpanded) "Thu gọn ▲" else "Xem thêm ▼",
+                                        text = if (descExpanded) Lang.t("show_less", lang) else Lang.t("show_more", lang),
                                         color = Color(0xFF9CA3AF),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
@@ -386,7 +428,7 @@ fun DetailScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("Danh sách tập", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                        Text(Lang.t("episodes_list", lang), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                         
                                         if (movieDetail.servers.size > 1) {
                                             Box(
@@ -419,6 +461,20 @@ fun DetailScreen(
                                                     .width(172.dp)
                                                     .clickable {
                                                         StorageHelpers.addToHistory(movie, ep.name)
+                                                        if (token.isNotBlank()) {
+                                                            scope.launch {
+                                                                try {
+                                                                    api.addToHistory(
+                                                                        slug = movie.slug,
+                                                                        name = movie.name,
+                                                                        thumbUrl = movie.thumbUrl.ifBlank { movie.posterUrl },
+                                                                        episode = ep.name
+                                                                    )
+                                                                } catch (e: Exception) {
+                                                                    // Ignore
+                                                                }
+                                                            }
+                                                        }
                                                         onPlayClick(movie, ep, movieDetail)
                                                     }
                                             ) {
@@ -456,14 +512,14 @@ fun DetailScreen(
                                                                 .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(4.dp))
                                                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                                                         ) {
-                                                            Text("✓ Đã xem", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                            Text("✓ " + Lang.t("watched", lang), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                                         }
                                                     }
                                                 }
                                                 
                                                 Spacer(modifier = Modifier.height(6.dp))
                                                 Text(
-                                                    text = ep.name.ifBlank { "Tập ${epIndex + 1}" },
+                                                    text = ep.name.ifBlank { if (lang == "vi") "Tập ${epIndex + 1}" else "Episode ${epIndex + 1}" },
                                                     color = Color.White,
                                                     fontSize = 12.5.sp,
                                                     fontWeight = FontWeight.Bold,
@@ -519,7 +575,7 @@ fun DetailScreen(
     if (showServerPicker && detail != null) {
         AlertDialog(
             onDismissRequest = { showServerPicker = false },
-            title = { Text("Chọn nguồn phát", color = Color.White) },
+            title = { Text(Lang.t("select_server", lang), color = Color.White) },
             containerColor = Color(0xFF191B24),
             text = {
                 Column {
@@ -642,12 +698,13 @@ fun CommentsSection(
     onSpoilerChange: (Boolean) -> Unit,
     onSubmitComment: () -> Unit
 ) {
+    val lang = LocalLanguage.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(bottom = 14.dp)
         ) {
-            Text("Bình luận", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(Lang.t("comments", lang), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.width(8.dp))
             Box(
                 modifier = Modifier
@@ -671,7 +728,7 @@ fun CommentsSection(
                 TextField(
                     value = newCommentText,
                     onValueChange = onCommentTextChange,
-                    placeholder = { Text("Viết bình luận...", color = Color.White.copy(alpha = 0.38f)) },
+                    placeholder = { Text(Lang.t("write_comment", lang), color = Color.White.copy(alpha = 0.38f)) },
                     colors = TextFieldDefaults.colors(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
@@ -704,7 +761,7 @@ fun CommentsSection(
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "👁️ Spoiler",
+                            text = Lang.t("spoiler", lang),
                             color = if (isSpoiler) Color(0xFF1CC749) else Color(0xFFA7ADBA),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -721,7 +778,7 @@ fun CommentsSection(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
                         modifier = Modifier.height(34.dp)
                     ) {
-                        Text("Gửi", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(Lang.t("send", lang), color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -737,7 +794,7 @@ fun CommentsSection(
                 contentAlignment = Alignment.CenterStart
             ) {
                 Text(
-                    text = "💬 Đăng nhập để tham gia bình luận",
+                    text = Lang.t("login_to_comment", lang),
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
@@ -768,7 +825,7 @@ fun CommentsSection(
                 Text("💬", fontSize = 24.sp, color = Color.White.copy(alpha = 0.31f))
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Chưa có bình luận nào. Hãy là người đầu tiên!",
+                    text = Lang.t("no_comments", lang),
                     color = Color.White.copy(alpha = 0.5f),
                     fontSize = 13.sp
                 )
@@ -781,7 +838,7 @@ fun CommentsSection(
                 itemsToShow.forEach { commentElement ->
                     val commentObj = commentElement.jsonObject
                     val user = commentObj["user"]?.jsonObject
-                    val username = user?.get("username")?.jsonPrimitive?.content ?: "Ẩn danh"
+                    val username = user?.get("username")?.jsonPrimitive?.content ?: Lang.t("anonymous", lang)
                     val content = commentObj["content"]?.jsonPrimitive?.content ?: ""
                     val isSpoiler = commentObj["isSpoiler"]?.jsonPrimitive?.content?.toBoolean() ?: false
                     
@@ -820,7 +877,7 @@ fun CommentsSection(
                                         .clickable { spoilerRevealed = true }
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
-                                    Text("Bình luận chứa spoiler! Nhấn để xem 👁️", color = Color(0xFFFD3F52), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Text(Lang.t("spoiler_warning", lang), color = Color(0xFFFD3F52), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
                             } else {
                                 Text(content, color = Color.White.copy(alpha = 0.86f), fontSize = 13.5.sp)
@@ -843,7 +900,7 @@ fun CommentsSection(
                             shape = RoundedCornerShape(19.dp),
                             border = BorderStroke(1.dp, Color(0x471CC749))
                         ) {
-                            Text("Xem thêm bình luận", fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                            Text(Lang.t("load_more_comments", lang), fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

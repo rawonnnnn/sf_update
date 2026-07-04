@@ -27,6 +27,9 @@ import coil3.compose.AsyncImage
 import com.sofaflix.kmp.SofaFlixApi
 import com.sofaflix.kmp.firstText
 import com.sofaflix.kmp.jsonObjectOrNull
+import com.sofaflix.kmp.LocalLanguage
+import com.sofaflix.kmp.Lang
+import com.sofaflix.kmp.StorageHelpers
 import kotlinx.coroutines.launch
 
 @Composable
@@ -34,10 +37,13 @@ fun ProfileScreen(
     api: SofaFlixApi,
     token: String,
     userProfileName: String,
+    currentLanguage: String,
+    onLanguageChange: (String) -> Unit,
     onLoginSuccess: (token: String, name: String) -> Unit,
     onLogout: () -> Unit
 ) {
     val isLoggedIn = token.isNotBlank()
+    val lang = LocalLanguage.current
     
     Box(
         modifier = Modifier
@@ -47,6 +53,8 @@ fun ProfileScreen(
         if (isLoggedIn) {
             LoggedInContent(
                 username = userProfileName,
+                currentLanguage = currentLanguage,
+                onLanguageChange = onLanguageChange,
                 onLogout = onLogout
             )
         } else {
@@ -55,15 +63,106 @@ fun ProfileScreen(
                 onLoginSuccess = onLoginSuccess
             )
         }
+        
+        // Language switcher for guest users
+        if (!isLoggedIn) {
+            var showLangDialog by remember { mutableStateOf(false) }
+            
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 16.dp, end = 16.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.08f))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                    .clickable { showLangDialog = true }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Language",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = if (currentLanguage == "vi") "VI" else "EN",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            
+            if (showLangDialog) {
+                AlertDialog(
+                    onDismissRequest = { showLangDialog = false },
+                    title = {
+                        Text(
+                            text = Lang.t("language", lang),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                    },
+                    containerColor = Color(0xFF1F222B),
+                    confirmButton = {
+                        TextButton(onClick = { showLangDialog = false }) {
+                            Text(if (lang == "vi") "Đóng" else "Close", color = Color(0xFF1CC749))
+                        }
+                    },
+                    text = {
+                        Column {
+                            listOf("vi" to "Tiếng Việt", "en" to "English").forEach { (code, name) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onLanguageChange(code)
+                                            showLangDialog = false
+                                        }
+                                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(name, color = Color.White, fontSize = 16.sp)
+                                    if (currentLanguage == code) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Selected",
+                                            tint = Color(0xFF1CC749),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+        }
     }
 }
 
 @Composable
 fun LoggedInContent(
     username: String,
+    currentLanguage: String,
+    onLanguageChange: (String) -> Unit,
     onLogout: () -> Unit
 ) {
     val scrollState = rememberScrollState()
+    val lang = LocalLanguage.current
+    
+    var showLangDialog by remember { mutableStateOf(false) }
+    var showCacheDialog by remember { mutableStateOf(false) }
+    var cacheClearedText by remember { mutableStateOf<String?>(null) }
+    
+    val scope = rememberCoroutineScope()
     
     Column(
         modifier = Modifier
@@ -80,7 +179,7 @@ fun LoggedInContent(
                 .padding(top = 16.dp, bottom = 18.dp)
         ) {
             Text(
-                text = "Cá nhân",
+                text = Lang.t("profile", lang),
                 color = Color.White,
                 fontSize = 32.sp,
                 fontWeight = FontWeight.ExtraBold
@@ -123,7 +222,7 @@ fun LoggedInContent(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = username.ifBlank { "Thành viên SofaFlix" },
+                        text = username.ifBlank { Lang.t("guest_user", lang) },
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold
@@ -147,7 +246,7 @@ fun LoggedInContent(
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
                     Text(
-                        text = "Đăng xuất",
+                        text = Lang.t("logout", lang),
                         color = Color(0xFFEF4444),
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Bold
@@ -160,23 +259,132 @@ fun LoggedInContent(
         
         // Menu Sections
         MenuSection(
-            title = "Cài đặt",
+            title = Lang.t("settings", lang),
             items = listOf(
-                MenuItemData(Icons.Default.Settings, "Giao diện", "Tối"),
-                MenuItemData(Icons.Default.Menu, "Ngôn ngữ", "Tiếng Việt"),
-                MenuItemData(Icons.Default.Notifications, "Thông báo", "Bật")
+                MenuItemData(
+                    icon = Icons.Default.Menu, 
+                    label = Lang.t("language", lang), 
+                    value = if (currentLanguage == "vi") "Tiếng Việt" else "English",
+                    onClick = { showLangDialog = true }
+                ),
+                MenuItemData(
+                    icon = Icons.Default.Notifications, 
+                    label = Lang.t("notifications", lang), 
+                    value = if (lang == "vi") "Bật" else "On"
+                )
             )
         )
         
         Spacer(modifier = Modifier.height(24.dp))
         
         MenuSection(
-            title = "Khác",
+            title = Lang.t("other", lang),
             items = listOf(
-                MenuItemData(Icons.Default.Delete, "Xóa bộ nhớ đệm", ""),
-                MenuItemData(Icons.Default.Star, "Đánh giá ứng dụng", ""),
-                MenuItemData(Icons.Default.Info, "Phiên bản", "1.0.0")
+                MenuItemData(
+                    icon = Icons.Default.Delete, 
+                    label = Lang.t("clear_cache", lang), 
+                    value = cacheClearedText ?: "",
+                    onClick = { showCacheDialog = true }
+                ),
+                MenuItemData(
+                    icon = Icons.Default.Star, 
+                    label = Lang.t("rate_app", lang), 
+                    value = ""
+                ),
+                MenuItemData(
+                    icon = Icons.Default.Info, 
+                    label = Lang.t("version", lang), 
+                    value = "1.0.0"
+                )
             )
+        )
+    }
+
+    if (showLangDialog) {
+        AlertDialog(
+            onDismissRequest = { showLangDialog = false },
+            title = {
+                Text(
+                    text = Lang.t("language", lang),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            containerColor = Color(0xFF1F222B),
+            confirmButton = {
+                TextButton(onClick = { showLangDialog = false }) {
+                    Text(if (lang == "vi") "Đóng" else "Close", color = Color(0xFF1CC749))
+                }
+            },
+            text = {
+                Column {
+                    listOf("vi" to "Tiếng Việt", "en" to "English").forEach { (code, name) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onLanguageChange(code)
+                                    showLangDialog = false
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(name, color = Color.White, fontSize = 16.sp)
+                            if (currentLanguage == code) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = Color(0xFF1CC749),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    if (showCacheDialog) {
+        AlertDialog(
+            onDismissRequest = { showCacheDialog = false },
+            title = {
+                Text(
+                    text = Lang.t("clear_cache", lang),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text(
+                    text = if (lang == "vi") "Bạn có chắc chắn muốn xóa toàn bộ bộ nhớ đệm (lịch sử xem, phim đã lưu)? Hành động này không thể hoàn tác." 
+                           else "Are you sure you want to clear all cache (watch history, saved movies)? This action cannot be undone.",
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 14.sp
+                )
+            },
+            containerColor = Color(0xFF1F222B),
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        StorageHelpers.clearCache()
+                        GuestStorage.favorites.clear()
+                        GuestStorage.history.clear()
+                        showCacheDialog = false
+                        cacheClearedText = Lang.t("clear_cache_success", lang)
+                    }
+                ) {
+                    Text(if (lang == "vi") "Xóa" else "Clear", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCacheDialog = false }) {
+                    Text(if (lang == "vi") "Hủy" else "Cancel", color = Color.White.copy(alpha = 0.6f))
+                }
+            }
         )
     }
 }
@@ -184,7 +392,8 @@ fun LoggedInContent(
 data class MenuItemData(
     val icon: ImageVector,
     val label: String,
-    val value: String
+    val value: String,
+    val onClick: () -> Unit = {}
 )
 
 @Composable
@@ -218,7 +427,7 @@ fun MenuSection(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { /* Action */ }
+                        .clickable { item.onClick() }
                         .padding(vertical = 15.dp, horizontal = 16.dp)
                 ) {
                     Box(
@@ -274,6 +483,7 @@ fun AuthContent(
     api: SofaFlixApi,
     onLoginSuccess: (String, String) -> Unit
 ) {
+    val lang = LocalLanguage.current
     var isLoginTab by remember { mutableStateOf(true) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -292,12 +502,12 @@ fun AuthContent(
         
         if (isLoginTab) {
             if (email.isBlank() || password.isBlank()) {
-                errorMsg = "Vui lòng nhập đầy đủ email và mật khẩu."
+                errorMsg = Lang.t("auth_req_email_password", lang)
                 return
             }
         } else {
             if (username.isBlank() || email.isBlank() || name.isBlank() || password.isBlank()) {
-                errorMsg = "Vui lòng điền đầy đủ thông tin đăng ký."
+                errorMsg = Lang.t("auth_req_all_fields", lang)
                 return
             }
         }
@@ -314,15 +524,15 @@ fun AuthContent(
                         val displayName = profileObj.firstText("name", "username").ifBlank { email }
                         onLoginSuccess(token, displayName)
                     } else {
-                        errorMsg = "Đăng nhập không thành công, vui lòng thử lại."
+                        errorMsg = Lang.t("auth_login_failed", lang)
                     }
                 } else {
                     api.register(username.trim(), password, email.trim(), name.trim())
-                    successMsg = "Đăng ký thành công. Hãy chuyển qua tab đăng nhập."
+                    successMsg = Lang.t("auth_register_success", lang)
                     isLoginTab = true
                 }
             } catch (e: Exception) {
-                errorMsg = e.message ?: "Có lỗi xảy ra, vui lòng thử lại."
+                errorMsg = e.message ?: Lang.t("auth_error_generic", lang)
             } finally {
                 loading = false
             }
@@ -352,7 +562,7 @@ fun AuthContent(
             )
             
             Text(
-                text = if (isLoginTab) "Đăng nhập để đồng bộ lịch sử và tủ phim" else "Tạo tài khoản SofaFlix mới",
+                text = if (isLoginTab) Lang.t("auth_login_subtitle", lang) else Lang.t("auth_register_subtitle", lang),
                 color = Color.White.copy(alpha = 0.5f),
                 fontSize = 14.sp,
                 textAlign = TextAlign.Center,
@@ -382,7 +592,7 @@ fun AuthContent(
                             .padding(4.dp)
                     ) {
                         TabHeader(
-                            title = "Đăng nhập",
+                            title = Lang.t("login", lang),
                             isActive = isLoginTab,
                             onClick = {
                                 isLoginTab = true
@@ -392,7 +602,7 @@ fun AuthContent(
                             modifier = Modifier.weight(1f)
                         )
                         TabHeader(
-                            title = "Đăng ký",
+                            title = Lang.t("register", lang),
                             isActive = !isLoginTab,
                             onClick = {
                                 isLoginTab = false
@@ -443,28 +653,28 @@ fun AuthContent(
                         AuthTextField(
                             value = email,
                             onValueChange = { email = it },
-                            placeholder = "Email đăng nhập",
+                            placeholder = Lang.t("placeholder_email", lang),
                             icon = Icons.Default.Email
                         )
                     } else {
                         AuthTextField(
                             value = username,
                             onValueChange = { username = it },
-                            placeholder = "Tên tài khoản",
+                            placeholder = Lang.t("placeholder_username", lang),
                             icon = Icons.Default.Person
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         AuthTextField(
                             value = email,
                             onValueChange = { email = it },
-                            placeholder = "Địa chỉ email",
+                            placeholder = Lang.t("placeholder_email", lang),
                             icon = Icons.Default.Email
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         AuthTextField(
                             value = name,
                             onValueChange = { name = it },
-                            placeholder = "Họ tên hiển thị",
+                            placeholder = Lang.t("placeholder_username", lang),
                             icon = Icons.Default.Face
                         )
                     }
@@ -474,7 +684,7 @@ fun AuthContent(
                     AuthTextField(
                         value = password,
                         onValueChange = { password = it },
-                        placeholder = "Mật khẩu",
+                        placeholder = Lang.t("placeholder_password", lang),
                         icon = Icons.Default.Lock,
                         isPassword = true
                     )
@@ -498,7 +708,7 @@ fun AuthContent(
                             CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(20.dp))
                         } else {
                             Text(
-                                text = if (isLoginTab) "ĐĂNG NHẬP" else "ĐĂNG KÝ TÀI KHOẢN",
+                                text = if (isLoginTab) Lang.t("login", lang).uppercase() else Lang.t("register", lang).uppercase(),
                                 color = Color.Black,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.ExtraBold

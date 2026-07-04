@@ -10,10 +10,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import kotlin.math.absoluteValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -25,6 +29,8 @@ import com.sofaflix.kmp.HomePayload
 import com.sofaflix.kmp.SofaFlixApi
 import com.sofaflix.kmp.ui.MovieCard
 import com.sofaflix.kmp.ui.SectionHeader
+import com.sofaflix.kmp.LocalLanguage
+import com.sofaflix.kmp.Lang
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 import sofaflix.composeapp.generated.resources.Res
@@ -42,6 +48,7 @@ fun HomeScreen(
     var errorMsg by remember { mutableStateOf<String?>(null) }
     
     val scope = rememberCoroutineScope()
+    val lang = LocalLanguage.current
     
     fun loadHome() {
         scope.launch {
@@ -50,7 +57,7 @@ fun HomeScreen(
             try {
                 payload = api.home()
             } catch (e: Exception) {
-                errorMsg = e.message ?: "Đã xảy ra lỗi tải phim"
+                errorMsg = e.message ?: Lang.t("load_movies_error", lang)
             } finally {
                 isLoading = false
             }
@@ -93,7 +100,7 @@ fun HomeScreen(
                     onClick = { loadHome() },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1CC749))
                 ) {
-                    Text("Thử lại", color = Color.White)
+                    Text(Lang.t("try_again", lang), color = Color.White)
                 }
             }
         }
@@ -108,6 +115,17 @@ fun HomeScreen(
                 if (hotMovies.isNotEmpty()) {
                     val pagerState = rememberPagerState(pageCount = { hotMovies.size })
                     
+                    // Auto-scroll banner slides every 5 seconds when not interacting
+                    LaunchedEffect(pagerState) {
+                        while (true) {
+                            kotlinx.coroutines.delay(5000)
+                            if (!pagerState.isScrollInProgress) {
+                                val nextPage = (pagerState.currentPage + 1) % hotMovies.size
+                                pagerState.animateScrollToPage(nextPage)
+                            }
+                        }
+                    }
+                    
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -118,7 +136,23 @@ fun HomeScreen(
                             modifier = Modifier.fillMaxSize()
                         ) { page ->
                             val movie = hotMovies[page]
-                            HeroSlide(movie = movie, onClick = { onMovieClick(movie.slug) })
+                            
+                            // Parallax scale and fade animations
+                            val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
+                            val scale = (1f - (pageOffset.absoluteValue * 0.12f)).coerceIn(0.88f, 1f)
+                            val alpha = (1f - (pageOffset.absoluteValue * 0.42f)).coerceIn(0.58f, 1f)
+                            
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        this.scaleX = scale
+                                        this.scaleY = scale
+                                        this.alpha = alpha
+                                    }
+                            ) {
+                                HeroSlide(movie = movie, onClick = { onMovieClick(movie.slug) })
+                            }
                         }
                         
                         Row(
@@ -147,10 +181,30 @@ fun HomeScreen(
                 
                 TopChart(movies = homeData.hot, onMovieClick = onMovieClick)
                 
-                MovieRail(title = "Mới cập nhật", movies = homeData.latest, onMovieClick = onMovieClick)
-                MovieRail(title = "Phim lẻ", movies = homeData.singles, onMovieClick = onMovieClick)
-                MovieRail(title = "Phim bộ", movies = homeData.series, onMovieClick = onMovieClick)
-                MovieRail(title = "Hoạt hình", movies = homeData.animation, onMovieClick = onMovieClick)
+                MovieRail(
+                    title = Lang.t("latest", lang),
+                    movies = homeData.latest,
+                    onMovieClick = onMovieClick,
+                    onSeeAllClick = { onCategoryClick(Lang.t("phim_moi", lang), "list", "") }
+                )
+                MovieRail(
+                    title = Lang.t("movies", lang),
+                    movies = homeData.singles,
+                    onMovieClick = onMovieClick,
+                    onSeeAllClick = { onCategoryClick(Lang.t("movies", lang), "list", "phim-le") }
+                )
+                MovieRail(
+                    title = Lang.t("series", lang),
+                    movies = homeData.series,
+                    onMovieClick = onMovieClick,
+                    onSeeAllClick = { onCategoryClick(Lang.t("series", lang), "list", "phim-bo") }
+                )
+                MovieRail(
+                    title = Lang.t("animation", lang),
+                    movies = homeData.animation,
+                    onMovieClick = onMovieClick,
+                    onSeeAllClick = { onCategoryClick(Lang.t("animation", lang), "genre", "hoat-hinh") }
+                )
                 
                 Spacer(modifier = Modifier.height(90.dp))
             }
@@ -235,6 +289,7 @@ fun HeroSlide(
             
             Spacer(modifier = Modifier.height(18.dp))
             
+            val lang = LocalLanguage.current
             Button(
                 onClick = onClick,
                 colors = ButtonDefaults.buttonColors(
@@ -246,7 +301,7 @@ fun HeroSlide(
                     .height(44.dp)
             ) {
                 Text(
-                    text = "Xem chi tiết",
+                    text = Lang.t("view_details", lang),
                     color = Color(0xFF111318),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
@@ -260,28 +315,31 @@ data class CategoryUi(
     val title: String,
     val kind: String,
     val slug: String,
-    val startColor: Color,
-    val endColor: Color,
-    val mark: String
+    val imageUrl: String,
+    val accentColor: Color
 )
 
 @Composable
 fun InterestCategories(onCategoryClick: (name: String, kind: String, slug: String) -> Unit) {
-    val items = remember {
+    val lang = LocalLanguage.current
+    val items = remember(lang) {
         listOf(
-            CategoryUi("Kinh Dị", "genre", "kinh-di", Color(0xFFFD3F52), Color(0xFFFD6B35), "☠"),
-            CategoryUi("Cổ Trang", "genre", "co-trang", Color(0xFF843CF6), Color(0xFFA367FC), "🛡"),
-            CategoryUi("Hoạt Hình", "genre", "hoat-hinh", Color(0xFF1E72F6), Color(0xFF49A3F9), "✦"),
-            CategoryUi("Hàn Quốc", "country", "han-quoc", Color(0xFF00C749), Color(0xFF15D886), "♡"),
-            CategoryUi("Âu Mỹ", "country", "au-my", Color(0xFFF43F80), Color(0xFFFF6B9D), "◎"),
-            CategoryUi("Lồng Tiếng", "genre", "long-tieng", Color(0xFFFD8900), Color(0xFFFDB600), "🎙"),
-            CategoryUi("Thuyết Minh", "genre", "thuyet-minh", Color(0xFF00BFA5), Color(0xFF00E5FF), "☵"),
-            CategoryUi("Phim Hot", "list", "phim-hot", Color(0xFFE040FB), Color(0xFFEA80FC), "♨")
+            CategoryUi(if (lang == "vi") "Hot Rần Rần" else "Trending", "country", "trung-quoc", "https://sofaflix.top/images/chu-de.webp", Color(0xFFF472B6)),
+            CategoryUi(if (lang == "vi") "Hàn Quốc" else "Korean", "country", "han-quoc", "https://sofaflix.top/images/chieu-rap.webp", Color(0xFFFB923C)),
+            CategoryUi(if (lang == "vi") "Lồng Tiếng" else "Dubbed", "genre", "long-tieng", "https://sofaflix.top/images/long-tieng.webp", Color(0xFFFACC15)),
+            CategoryUi(if (lang == "vi") "Thuyết Minh" else "Subbed", "genre", "thuyet-minh", "https://sofaflix.top/images/thuyet-minh.webp", Color(0xFF60A5FA)),
+            CategoryUi(if (lang == "vi") "Cổ Trang" else "Historical", "genre", "co-trang", "https://sofaflix.top/images/co-trang.webp", Color(0xFF34D399)),
+            CategoryUi(if (lang == "vi") "Kinh Dị" else "Horror", "genre", "kinh-di", "https://sofaflix.top/images/kinh-di.webp", Color(0xFFA78BFA)),
+            CategoryUi(if (lang == "vi") "Âu Mỹ" else "Western", "country", "au-my", "https://sofaflix.top/images/dien-anh-au-my.webp", Color(0xFFBEF264)),
+            CategoryUi(if (lang == "vi") "Hoạt Hình" else "Animation", "genre", "hoat-hinh", "https://sofaflix.top/images/hoat-hinh.webp", Color(0xFF2DD4BF))
         )
     }
     
     Column(modifier = Modifier.padding(top = 30.dp)) {
-        SectionHeader("Khám phá theo thể loại")
+        SectionHeader(
+            title = Lang.t("explore_categories", lang),
+            onSeeAllClick = { onCategoryClick(Lang.t("explore", lang), "list", "") }
+        )
         LazyRow(
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -300,47 +358,88 @@ fun InterestCategories(onCategoryClick: (name: String, kind: String, slug: Strin
 fun CategoryCard(item: CategoryUi, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .width(130.dp)
-            .height(76.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(item.startColor, item.endColor)
-                )
-            )
+            .width(140.dp)
+            .aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF090A0F))
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
             .clickable { onClick() }
     ) {
-        Text(
-            text = item.mark,
-            color = Color.White.copy(alpha = 0.16f),
-            fontSize = 58.sp,
-            fontWeight = FontWeight.Bold,
+        // Blurred background image
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = item.imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .scale(2.5f)
+                    .blur(20.dp)
+            )
+            // Dark gradient overlay
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.1f),
+                                Color.Black.copy(alpha = 0.4f),
+                                Color.Black.copy(alpha = 0.85f)
+                            )
+                        )
+                    )
+            )
+        }
+
+        // Illustration Image (bottom-right aligned)
+        AsyncImage(
+            model = item.imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            alignment = Alignment.BottomEnd,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .offset(18.dp, 20.dp)
+                .offset(x = 10.dp, y = 0.dp)
+                .fillMaxHeight(0.9f)
+                .fillMaxWidth(0.58f)
         )
-        
-        Text(
-            text = item.mark,
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = 19.sp,
-            fontWeight = FontWeight.Bold,
+
+        // Contents (left/bottom aligned)
+        Column(
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 12.dp, top = 12.dp)
-        )
-        
-        Text(
-            text = item.title,
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
-        )
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Icon backdrop box
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(item.accentColor.copy(alpha = 0.15f))
+                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "#",
+                    color = item.accentColor,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            // Category Title
+            Text(
+                text = item.title,
+                color = Color.White,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(0.68f)
+            )
+        }
     }
 }
 
@@ -356,6 +455,7 @@ fun TopChart(movies: List<Movie>, onMovieClick: (String) -> Unit) {
                 .padding(horizontal = 24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val lang = LocalLanguage.current
             Box(
                 modifier = Modifier
                     .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
@@ -370,7 +470,7 @@ fun TopChart(movies: List<Movie>, onMovieClick: (String) -> Unit) {
             }
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-                text = "Đang hot",
+                text = Lang.t("trending", lang),
                 color = Color.White,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
@@ -451,10 +551,15 @@ fun TopChartCard(movie: Movie, rank: Int, onClick: () -> Unit) {
 }
 
 @Composable
-fun MovieRail(title: String, movies: List<Movie>, onMovieClick: (String) -> Unit) {
+fun MovieRail(
+    title: String,
+    movies: List<Movie>,
+    onMovieClick: (String) -> Unit,
+    onSeeAllClick: (() -> Unit)? = null
+) {
     if (movies.isEmpty()) return
     Column(modifier = Modifier.padding(top = 30.dp)) {
-        SectionHeader(title)
+        SectionHeader(title = title, onSeeAllClick = onSeeAllClick)
         LazyRow(
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(0.dp)

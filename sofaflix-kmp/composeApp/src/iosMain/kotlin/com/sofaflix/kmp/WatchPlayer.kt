@@ -2,6 +2,7 @@ package com.sofaflix.kmp
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.UIKitView
 import platform.WebKit.WKWebView
@@ -46,6 +47,13 @@ actual fun WatchPlayer(
     onUpdateProgress: (Double, Double) -> Unit,
     modifier: Modifier
 ) {
+    DisposableEffect(Unit) {
+        platform.UIKit.UIApplication.sharedApplication.idleTimerDisabled = true
+        onDispose {
+            platform.UIKit.UIApplication.sharedApplication.idleTimerDisabled = false
+        }
+    }
+
     val savedProgressSec = remember(movie.slug, episode.name) {
         StorageHelpers.getEpisodeProgress(movie.slug, episode.name)
     }
@@ -897,6 +905,11 @@ private fun generateArtplayerHtml(
             settings: playerSettings(),
             autoPlayback: true,
             theme: '#1cc749',
+            moreVideoAttr: {
+              'playsinline': true,
+              'webkit-playsinline': true,
+              'x5-playsinline': true,
+            },
             cssVar: {
               '--art-settings-max-height': '360px',
               '--art-selector-max-height': '360px',

@@ -11,4 +11,9 @@ actual object AppPreferences {
         NSUserDefaults.standardUserDefaults.setObject(value, forKey = key)
         NSUserDefaults.standardUserDefaults.synchronize()
     }
+
+    actual fun remove(key: String) {
+        NSUserDefaults.standardUserDefaults.removeObjectForKey(key)
+        NSUserDefaults.standardUserDefaults.synchronize()
+    }
 }

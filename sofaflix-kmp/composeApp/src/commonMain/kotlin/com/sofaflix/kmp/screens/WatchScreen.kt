@@ -31,6 +31,7 @@ fun WatchScreen(
     movieDetail: MovieDetail,
     onBackClick: () -> Unit
 ) {
+    val lang = LocalLanguage.current
     var activeEpisode by remember { mutableStateOf(initialEpisode) }
     var activeServerIndex by remember { mutableStateOf(0) }
     var showServerPicker by remember { mutableStateOf(false) }
@@ -59,6 +60,18 @@ fun WatchScreen(
     LaunchedEffect(movie.slug, activeEpisode) {
         StorageHelpers.addToHistory(movie, activeEpisode.name)
         StorageHelpers.markEpisodeWatched(movie.slug, activeEpisode.name)
+        if (token.isNotBlank()) {
+            try {
+                api.addToHistory(
+                    slug = movie.slug,
+                    name = movie.name,
+                    thumbUrl = movie.thumbUrl.ifBlank { movie.posterUrl },
+                    episode = activeEpisode.name
+                )
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
         
         // Refresh watched set
         watchedSet.clear()
@@ -158,7 +171,7 @@ fun WatchScreen(
             ) {
                 // Now playing metadata
                 Text(
-                    text = "ĐANG PHÁT",
+                    text = Lang.t("now_playing", lang),
                     color = Color(0xFFA7ADBA),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -198,7 +211,7 @@ fun WatchScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Chọn tập phim",
+                            text = Lang.t("select_episode", lang),
                             color = Color.White,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
@@ -309,14 +322,14 @@ fun WatchScreen(
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text("✓ ", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                Text("Đã xem", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                Text(Lang.t("watched", lang), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                             }
                                         }
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = ep.name.ifBlank { "Tập ${epIndex + 1}" },
+                                    text = ep.name.ifBlank { if (lang == "vi") "Tập ${epIndex + 1}" else "Episode ${epIndex + 1}" },
                                     color = if (isActive) Color.White else Color(0xFFA7ADBA),
                                     fontSize = 12.sp,
                                     fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
@@ -365,7 +378,7 @@ fun WatchScreen(
     if (showServerPicker) {
         AlertDialog(
             onDismissRequest = { showServerPicker = false },
-            title = { Text("Chọn nguồn phát", color = Color.White) },
+            title = { Text(Lang.t("select_server", lang), color = Color.White) },
             containerColor = Color(0xFF191B24),
             text = {
                 Column {

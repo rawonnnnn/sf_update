@@ -11,6 +11,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.serialization.json.Json
@@ -42,6 +44,14 @@ actual fun WatchPlayer(
     onUpdateProgress: (Double, Double) -> Unit,
     modifier: Modifier
 ) {
+    val activity = LocalContext.current.findActivity()
+    DisposableEffect(activity) {
+        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     val savedProgressSec = remember(movie.slug, episode.name) {
         StorageHelpers.getEpisodeProgress(movie.slug, episode.name)
     }
@@ -79,13 +89,27 @@ actual fun WatchPlayer(
     AndroidView(
         modifier = modifier,
         factory = { context ->
-            WebView(context).apply {
+            object : WebView(context) {
+                override fun dispatchKeyEvent(event: android.view.KeyEvent?): Boolean {
+                    if (event?.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+                        if (event.action == android.view.KeyEvent.ACTION_UP) {
+                            val activity = context.findActivity() as? androidx.activity.ComponentActivity
+                            activity?.onBackPressedDispatcher?.onBackPressed()
+                        }
+                        return true
+                    }
+                    return super.dispatchKeyEvent(event)
+                }
+            }.apply {
                 layoutParams = android.view.ViewGroup.LayoutParams(
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                 settings.javaScriptEnabled = true
+                settings.javaScriptCanOpenWindowsAutomatically = true
+                settings.allowFileAccess = true
+                settings.allowContentAccess = true
                 settings.mediaPlaybackRequiresUserGesture = false
                 settings.domStorageEnabled = true
                 settings.useWideViewPort = true
@@ -110,7 +134,7 @@ actual fun WatchPlayer(
                         isCustomViewActive = true
 
                         val activity = context.findActivity() ?: return
-                        val root = activity.findViewById<FrameLayout>(android.R.id.content) ?: return
+                        val root = activity.window.decorView as FrameLayout
                         
                         view?.setBackgroundColor(android.graphics.Color.BLACK)
                         root.addView(view, FrameLayout.LayoutParams(
@@ -145,7 +169,7 @@ actual fun WatchPlayer(
                         val cb = customCallbackRef
                         
                         val activity = context.findActivity() ?: return
-                        val root = activity.findViewById<FrameLayout>(android.R.id.content) ?: return
+                        val root = activity.window.decorView as FrameLayout
                         
                         root.removeView(cv)
                         customViewRef = null
