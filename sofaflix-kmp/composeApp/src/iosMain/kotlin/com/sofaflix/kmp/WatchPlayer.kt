@@ -115,7 +115,7 @@ actual fun WatchPlayer(
                                 document.querySelectorAll('video').forEach(applyPlaysInline);
                             })();
                         """.trimIndent(),
-                        injectionTime = platform.WebKit.WKUserScriptInjectionTimeAtDocumentStart,
+                        injectionTime = platform.WebKit.WKUserScriptInjectionTime.WKUserScriptInjectionTimeAtDocumentStart,
                         forMainFrameOnly = false
                     )
                     addUserScript(playsinlineScript)
