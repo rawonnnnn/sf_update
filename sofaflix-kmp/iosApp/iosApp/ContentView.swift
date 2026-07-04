@@ -25,7 +25,7 @@ class FullscreenViewController: UIViewController {
         view.addSubview(contentViewController.view)
         contentViewController.view.frame = view.bounds
         contentViewController.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        contentViewController.didMove(toParent: this)
+        contentViewController.didMove(toParent: self)
     }
     
     override var prefersHomeIndicatorAutoHidden: Bool {
