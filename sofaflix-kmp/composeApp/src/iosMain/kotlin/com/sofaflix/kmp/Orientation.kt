@@ -38,7 +38,7 @@ actual fun SetScreenOrientation(isLandscape: Boolean) {
                 UIInterfaceOrientationPortrait
             }
             UIDevice.currentDevice.setValue(
-                NSNumber.numberWithInteger(value.toLong()),
+                value = NSNumber.numberWithInteger(value.toLong()),
                 forKey = "orientation"
             )
         }
@@ -55,7 +55,7 @@ actual fun SetScreenOrientation(isLandscape: Boolean) {
                 }
             } else {
                 UIDevice.currentDevice.setValue(
-                    NSNumber.numberWithInteger(UIInterfaceOrientationPortrait.toLong()),
+                    value = NSNumber.numberWithInteger(UIInterfaceOrientationPortrait.toLong()),
                     forKey = "orientation"
                 )
             }
