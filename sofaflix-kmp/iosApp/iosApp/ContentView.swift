@@ -38,6 +38,23 @@ struct ComposeView: UIViewControllerRepresentable {
     
     func makeUIViewController(context: Context) -> FullscreenViewController {
         let mainVC = MainKt.MainViewController()
+        OrientationKt.registerOrientationHandler { landscape in
+            DispatchQueue.main.async {
+                if #available(iOS 16.0, *) {
+                    if let windowScene = UIApplication.shared.connectedScenes.first(where: { $0 is UIWindowScene }) as? UIWindowScene {
+                        let mask: UIInterfaceOrientationMask = landscape ? .landscapeRight : .portrait
+                        let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
+                        windowScene.requestGeometryUpdate(geometryPreferences) { error in
+                            print("Failed to change orientation: \(error)")
+                        }
+                        windowScene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                    }
+                } else {
+                    let value = landscape ? UIInterfaceOrientation.landscapeRight.rawValue : UIInterfaceOrientation.portrait.rawValue
+                    UIDevice.current.setValue(value, forKey: "orientation")
+                }
+            }
+        }
         return FullscreenViewController(contentViewController: mainVC)
     }
 
