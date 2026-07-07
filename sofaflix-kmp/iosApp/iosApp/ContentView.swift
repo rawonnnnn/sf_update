@@ -38,11 +38,46 @@ struct ComposeView: UIViewControllerRepresentable {
     
     func makeUIViewController(context: Context) -> FullscreenViewController {
         let mainVC = MainKt.MainViewController()
-        return FullscreenViewController(contentViewController: mainVC)
+        let controller = FullscreenViewController(contentViewController: mainVC)
+        
+        // Listen for orientation change requests from Kotlin via NSNotificationCenter
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("SofaFlixRequestLandscape"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            requestOrientation(landscape: true)
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("SofaFlixRequestPortrait"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            requestOrientation(landscape: false)
+        }
+        
+        return controller
     }
 
     func updateUIViewController(_ uiViewController: FullscreenViewController, context: Context) {
         uiViewController.isLandscape = isLandscape
+    }
+}
+
+private func requestOrientation(landscape: Bool) {
+    if #available(iOS 16.0, *) {
+        if let windowScene = UIApplication.shared.connectedScenes.first(where: { $0 is UIWindowScene }) as? UIWindowScene {
+            let mask: UIInterfaceOrientationMask = landscape ? .landscapeRight : .portrait
+            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
+            windowScene.requestGeometryUpdate(geometryPreferences) { error in
+                print("Orientation update error: \(error)")
+            }
+            windowScene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+        }
+    } else {
+        let value = landscape ? UIInterfaceOrientation.landscapeRight.rawValue : UIInterfaceOrientation.portrait.rawValue
+        UIDevice.current.setValue(value, forKey: "orientation")
     }
 }
 
