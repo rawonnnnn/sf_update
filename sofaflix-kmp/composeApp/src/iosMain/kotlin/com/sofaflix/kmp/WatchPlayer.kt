@@ -18,7 +18,8 @@ import platform.CoreGraphics.CGRectMake
 
 class iOSMessageHandler(
     private val onPlayNext: () -> Unit,
-    private val onProgress: (Double, Double) -> Unit
+    private val onProgress: (Double, Double) -> Unit,
+    private val onToggleFullscreen: (Boolean) -> Unit
 ) : NSObject(), WKScriptMessageHandlerProtocol {
     override fun userContentController(
         userContentController: WKUserContentController,
@@ -33,6 +34,9 @@ class iOSMessageHandler(
             val current = currentRegex.find(body)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
             val duration = durationRegex.find(body)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
             onProgress(current, duration)
+        } else if (body.contains("\"toggleFullscreen\"")) {
+            val isFullscreen = body.contains("\"isFullscreen\":true")
+            onToggleFullscreen(isFullscreen)
         }
     }
 }
@@ -45,6 +49,8 @@ actual fun WatchPlayer(
     hasNext: Boolean,
     onPlayNextEpisode: () -> Unit,
     onUpdateProgress: (Double, Double) -> Unit,
+    isFullscreen: Boolean,
+    onToggleFullscreen: (Boolean) -> Unit,
     modifier: Modifier
 ) {
     DisposableEffect(Unit) {
@@ -63,7 +69,7 @@ actual fun WatchPlayer(
     val htmlContent = remember(movie, episode, hasNext, savedProgressSec) {
         val stream = episode.streamUrl
         if (stream.isNotBlank()) {
-            val absoluteStreamUrl = if (stream.startsWith("http")) stream else "https://sofaflix.top${if (stream.startsWith("/")) "" else "/"}$stream"
+            val absoluteStreamUrl = if (stream.startsWith("http")) stream else "${getBaseUrl()}${if (stream.startsWith("/")) "" else "/"}$stream"
             val subsJson = getSubtitlesJson(episode)
             generateArtplayerHtml(
                 m3u8Url = absoluteStreamUrl,
@@ -84,7 +90,7 @@ actual fun WatchPlayer(
             val configuration = WKWebViewConfiguration().apply {
                 val controller = WKUserContentController().apply {
                     addScriptMessageHandler(
-                        iOSMessageHandler(onPlayNextEpisode, onUpdateProgress),
+                        iOSMessageHandler(onPlayNextEpisode, onUpdateProgress, onToggleFullscreen),
                         "App"
                     )
                     val playsinlineScript = platform.WebKit.WKUserScript(
@@ -137,9 +143,9 @@ actual fun WatchPlayer(
             lastLoaded.add(targetUrl)
 
             if (stream.isNotBlank()) {
-                webView.loadHTMLString(htmlContent, baseURL = NSURL.URLWithString("https://sofaflix.top"))
+                webView.loadHTMLString(htmlContent, baseURL = NSURL.URLWithString(getBaseUrl()))
             } else if (embed.isNotBlank()) {
-                val absoluteEmbedUrl = if (embed.startsWith("http")) embed else "https://sofaflix.top${if (embed.startsWith("/")) "" else "/"}$embed"
+                val absoluteEmbedUrl = if (embed.startsWith("http")) embed else "${getBaseUrl()}${if (embed.startsWith("/")) "" else "/"}$embed"
                 val nsUrl = NSURL.URLWithString(absoluteEmbedUrl)
                 if (nsUrl != null) {
                     webView.loadRequest(NSURLRequest.requestWithURL(nsUrl))
@@ -155,24 +161,29 @@ actual fun WatchPlayer(
                 lastLoaded.clear()
                 lastLoaded.add(targetUrl)
                 if (stream.isNotBlank()) {
-                    webView.loadHTMLString(htmlContent, baseURL = NSURL.URLWithString("https://sofaflix.top"))
+                    webView.loadHTMLString(htmlContent, baseURL = NSURL.URLWithString(getBaseUrl()))
                 } else if (embed.isNotBlank()) {
-                    val absoluteEmbedUrl = if (embed.startsWith("http")) embed else "https://sofaflix.top${if (embed.startsWith("/")) "" else "/"}$embed"
+                    val absoluteEmbedUrl = if (embed.startsWith("http")) embed else "${getBaseUrl()}${if (embed.startsWith("/")) "" else "/"}$embed"
                     val nsUrl = NSURL.URLWithString(absoluteEmbedUrl)
                     if (nsUrl != null) {
                         webView.loadRequest(NSURLRequest.requestWithURL(nsUrl))
                     }
                 }
             }
+            webView.evaluateJavaScript("if (window.art) { window.art.fullscreenWeb = $isFullscreen; }", null)
         }
     )
+}
+
+private fun getBaseUrl(): String {
+    return AppPreferences.getString("sf:api_domain", "https://sofaflix.baby")
 }
 
 private fun getAbsoluteUrl(url: String): String {
     if (url.startsWith("http://") || url.startsWith("https://")) {
         return url
     }
-    return "https://sofaflix.top" + if (url.startsWith("/")) url else "/$url"
+    return getBaseUrl() + if (url.startsWith("/")) url else "/$url"
 }
 
 private fun getSubtitlesJson(episode: Episode): String {
@@ -930,10 +941,10 @@ private fun generateArtplayerHtml(
             hotkey: true,
             pip: false,
             mutex: true,
-            fullscreen: true,
+            fullscreen: false,
             fullscreenWeb: true,
             subtitleOffset: false,
-            miniProgressBar: true,
+            miniProgressBar: false,
             settings: playerSettings(),
             autoPlayback: true,
             theme: '#1cc749',
@@ -1145,6 +1156,10 @@ private fun generateArtplayerHtml(
               postMessageToApp('updateProgress', { currentTime: art.currentTime, duration: art.duration });
             }
           });
+
+          art.on('fullscreenWeb', (state) => {
+            postMessageToApp('toggleFullscreen', { isFullscreen: state });
+          });
         }
 
         window.updatePlayerState = function (hasNext, newSubtitleTracks) {
@@ -1168,6 +1183,19 @@ private fun generateArtplayerHtml(
             }
           }
         }
+
+        // Prevent notification bar pull-down from triggering player seek/gestures
+        document.addEventListener('touchstart', function(e) {
+          if (e.touches && e.touches[0] && e.touches[0].clientY < 65) {
+            e.stopPropagation();
+          }
+        }, { capture: true, passive: true });
+
+        document.addEventListener('touchmove', function(e) {
+          if (e.touches && e.touches[0] && e.touches[0].clientY < 65) {
+            e.stopPropagation();
+          }
+        }, { capture: true, passive: true });
 
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
           initPlayer();

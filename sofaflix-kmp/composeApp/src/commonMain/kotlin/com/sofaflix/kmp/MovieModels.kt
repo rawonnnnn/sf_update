@@ -62,3 +62,14 @@ data class HomePayload(
     val series: List<Movie>,
     val animation: List<Movie>
 )
+
+@Serializable
+data class AppVersionInfo(
+    val latestVersion: String,
+    val minSupportedVersion: String,
+    val force: Boolean,
+    val androidUrl: String,
+    val iosUrl: String,
+    val message: String,
+    val apiDomain: String? = null
+)

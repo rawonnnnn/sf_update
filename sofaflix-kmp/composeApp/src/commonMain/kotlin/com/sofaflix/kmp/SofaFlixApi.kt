@@ -8,7 +8,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.*
 
 class SofaFlixApi(
-    private val baseUrl: String = "https://sofaflix.top"
+    var baseUrl: String = "https://sofaflix.baby"
 ) {
     var token: String = ""
     private val imageBase = "https://phimimg.com"
@@ -418,6 +418,35 @@ class SofaFlixApi(
             postJson("/v1/user/favorites", body)
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    suspend fun getAppVersionInfo(): AppVersionInfo? {
+        return try {
+            val randomT = (0..9999999).random()
+            val responseText = try {
+                client.get("https://rawonnnnn.github.io/update/version.json?t=$randomT") {
+                    header("Accept", "application/json")
+                }.bodyAsText()
+            } catch (e: Exception) {
+                client.get("https://raw.githubusercontent.com/rawonnnnn/update/main/version.json?t=$randomT") {
+                    header("Accept", "application/json")
+                }.bodyAsText()
+            }
+            val json = Json.parseToJsonElement(responseText)
+            val obj = json.jsonObjectOrNull ?: return null
+            AppVersionInfo(
+                latestVersion = obj.firstText("latestVersion", "latest_version", "version"),
+                minSupportedVersion = obj.firstText("minSupportedVersion", "min_supported_version", "minVersion"),
+                force = obj["force"]?.jsonPrimitiveOrNull?.content?.toBoolean() ?: false,
+                androidUrl = obj.firstText("androidUrl", "android_url", "android"),
+                iosUrl = obj.firstText("iosUrl", "ios_url", "ios"),
+                message = obj.firstText("message", "updateMessage", "update_message"),
+                apiDomain = obj.firstText("apiDomain", "api_domain", "apiDomainUrl", "apiUrl")
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
     }
 

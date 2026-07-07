@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +46,7 @@ fun SearchScreen(
     onMovieClick: (String) -> Unit
 ) {
     val lang = LocalLanguage.current
+    val focusManager = LocalFocusManager.current
     var query by remember { mutableStateOf("") }
     var debouncedQuery by remember { mutableStateOf("") }
     
@@ -280,7 +282,10 @@ fun SearchScreen(
                                 imeAction = ImeAction.Search
                             ),
                             keyboardActions = KeyboardActions(
-                                onSearch = { fetchMovies(1, true) }
+                                onSearch = {
+                                    focusManager.clearFocus()
+                                    fetchMovies(1, true)
+                                }
                             ),
                             modifier = Modifier
                                 .weight(1f)
@@ -497,6 +502,7 @@ fun FilterChip(
     isActive: Boolean,
     onClick: () -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
@@ -506,7 +512,10 @@ fun FilterChip(
                 color = if (isActive) Color(0xFF1CC749).copy(alpha = 0.3f) else Color.Transparent,
                 shape = RoundedCornerShape(6.dp)
             )
-            .clickable { onClick() }
+            .clickable {
+                focusManager.clearFocus()
+                onClick()
+            }
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Text(

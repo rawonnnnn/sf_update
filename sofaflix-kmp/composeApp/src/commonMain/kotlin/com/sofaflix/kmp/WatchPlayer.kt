@@ -10,5 +10,7 @@ expect fun WatchPlayer(
     hasNext: Boolean,
     onPlayNextEpisode: () -> Unit,
     onUpdateProgress: (Double, Double) -> Unit,
+    isFullscreen: Boolean,
+    onToggleFullscreen: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 )

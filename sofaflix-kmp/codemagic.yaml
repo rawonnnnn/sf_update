@@ -1,0 +1,91 @@
+# Codemagic CI/CD Configuration for SofaFlix KMP
+# To start building:
+# 1. Connect your repository to Codemagic (https://codemagic.io)
+# 2. Select 'codemagic.yaml' as the build configuration source
+# 3. Add Apple Developer portal certificates and profiles in Codemagic environment variables if building for App Store / TestFlight.
+
+workflows:
+  ios-build:
+    name: SofaFlix
+    max_build_duration: 120
+    instance_type: mac_mini_co2 # Apple Silicon Mac Mini instance
+    
+    environment:
+      groups:
+        # Define iOS code signing credentials group in Codemagic dashboard if building for App Store/TestFlight
+        # - app_store_credentials 
+        - global
+      vars:
+        XCODE_PROJECT: "iosApp/iosApp.xcodeproj"
+        XCODE_SCHEME: "iosApp"
+      xcode: latest
+      node: latest
+      
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: '*'
+          include: true
+
+    scripts:
+      - name: Set up local.properties
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          
+      - name: Cache Gradle Dependencies
+        script: |
+          # Speeds up gradle execution by reusing cached gradle home
+          mkdir -p ~/.gradle
+          echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties
+
+      - name: Setup Code Signing (If credentials are configured)
+        script: |
+          # Unencrypt and set up provisioning profiles if environment variables are present
+          keychain initialize
+          if [ -z "$APP_STORE_PROVISIONING_PROFILE" ]; then
+            echo "No provisioning profile found. Building unsigned simulator/testing package."
+          else
+            # Automatically fetch and install profiles
+            app-store-connect fetch-signing-files
+            keychain add-certificates
+          fi
+
+      - name: Build iOS App
+        script: |
+          # We use xcodebuild to compile the project.
+          # If signing is configured, build a release IPA.
+          # If not, build a simulator version (unsigned) for testing.
+          
+          if [ -n "$APP_STORE_PROVISIONING_PROFILE" ]; then
+            # Build for physical devices/App Store
+            xcodebuild \
+              -project "$XCODE_PROJECT" \
+              -scheme "$XCODE_SCHEME" \
+              -configuration Release \
+              -archivePath build/ios/archive/iosApp.xcarchive \
+              archive
+              
+            # Export archive to IPA
+            xcodebuild \
+              -exportArchive \
+              -archivePath build/ios/archive/iosApp.xcarchive \
+              -exportOptionsPlist iosApp/exportOptions.plist \
+              -exportPath build/ios/ipa
+          else
+            # Build unsigned simulator version for testing/verification
+            xcodebuild \
+              -project "$XCODE_PROJECT" \
+              -scheme "$XCODE_SCHEME" \
+              -configuration Debug \
+              -sdk iphonesimulator \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              clean build
+          fi
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug-iphonesimulator/*.app

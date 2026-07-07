@@ -94,53 +94,73 @@ fun WatchScreen(
         loadingComments = false
     }
 
+    var isFullscreen by remember { mutableStateOf(false) }
+
+    if (isFullscreen) {
+        SetScreenOrientation(isLandscape = true)
+    }
+
+    BackHandler(enabled = isFullscreen) {
+        isFullscreen = false
+    }
+
     Scaffold(
         containerColor = Color(0xFF191B24)
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .then(if (isFullscreen) Modifier else Modifier.padding(paddingValues))
         ) {
             // 1. Top Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .background(Color.Black)
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
+            if (!isFullscreen) {
+                Row(
                     modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .clickable { onBackClick() },
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .background(Color.Black)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .clickable { onBackClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "‹",
+                            color = Color.White,
+                            fontSize = 34.sp,
+                            fontWeight = FontWeight.Light
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "‹",
+                        text = movie.name,
                         color = Color.White,
-                        fontSize = 34.sp,
-                        fontWeight = FontWeight.Light
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = movie.name,
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
 
             // 2. Video Player
-            Box(
-                modifier = Modifier
+            val playerModifier = if (isFullscreen) {
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            } else {
+                Modifier
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
                     .background(Color.Black)
+            }
+
+            Box(
+                modifier = playerModifier
             ) {
                 WatchPlayer(
                     movie = movie,
@@ -157,18 +177,23 @@ fun WatchScreen(
                             StorageHelpers.updateHistoryProgress(movie.slug, currentTime / duration)
                         }
                     },
+                    isFullscreen = isFullscreen,
+                    onToggleFullscreen = { isFS ->
+                        isFullscreen = isFS
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
             // 3. Bottom scrollable content
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
-            ) {
+            if (!isFullscreen) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
                 // Now playing metadata
                 Text(
                     text = Lang.t("now_playing", lang),
@@ -374,6 +399,7 @@ fun WatchScreen(
             }
         }
     }
+}
 
     if (showServerPicker) {
         AlertDialog(

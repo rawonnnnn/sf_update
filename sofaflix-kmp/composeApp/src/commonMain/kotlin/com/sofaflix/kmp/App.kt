@@ -59,12 +59,45 @@ fun App() {
     var activeWatchDetail by remember { mutableStateOf<MovieDetail?>(null) }
 
     var currentLanguage by remember { mutableStateOf("vi") }
+    var updateInfo by remember { mutableStateOf<AppVersionInfo?>(null) }
 
     LaunchedEffect(Unit) {
+        val savedApiDomain = AppPreferences.getString("sf:api_domain", "")
+        if (savedApiDomain.isNotBlank()) {
+            api.baseUrl = savedApiDomain
+        }
+
         token = AppPreferences.getString("sf:token", "")
         userProfileName = AppPreferences.getString("sf:user_name", "")
         api.token = token
         currentLanguage = AppPreferences.getString("sf:language", "vi")
+
+        try {
+            val remoteInfo = api.getAppVersionInfo()
+            println("SF_DEBUG: remoteInfo = $remoteInfo")
+            if (remoteInfo != null) {
+                remoteInfo.apiDomain?.let { newDomain ->
+                    if (newDomain.isNotBlank() && newDomain != api.baseUrl) {
+                        api.baseUrl = newDomain
+                        AppPreferences.putString("sf:api_domain", newDomain)
+                    }
+                }
+
+                val currentVersion = AppPreferences.getAppVersion()
+                println("SF_DEBUG: currentVersion = $currentVersion, latestVersion = ${remoteInfo.latestVersion}")
+                if (isVersionNewer(currentVersion, remoteInfo.latestVersion)) {
+                    println("SF_DEBUG: Showing update dialog!")
+                    updateInfo = remoteInfo
+                } else {
+                    println("SF_DEBUG: App is up to date!")
+                }
+            } else {
+                println("SF_DEBUG: remoteInfo is null!")
+            }
+        } catch (e: Exception) {
+            println("SF_DEBUG: Failed to fetch version info: ${e.message}")
+            e.printStackTrace()
+        }
     }
 
     fun handleLoginSuccess(newToken: String, newName: String) {
@@ -153,6 +186,10 @@ fun App() {
                             activeWatchMovie = movie
                             activeWatchEpisode = ep
                             activeWatchDetail = detailData
+                        },
+                        onLoginRequired = {
+                            selectedMovieSlug = null
+                            currentScreen = Screen.Profile
                         }
                     )
                 } else {
@@ -233,6 +270,74 @@ fun App() {
                     )
                 }
             }
+
+            // Update Dialog
+            updateInfo?.let { info ->
+                val force = info.force || isVersionNewer(AppPreferences.getAppVersion(), info.minSupportedVersion)
+                val updateUrl = if (AppPreferences.getPlatform() == "android") info.androidUrl else info.iosUrl
+
+                AlertDialog(
+                    onDismissRequest = {
+                        if (!force) {
+                            updateInfo = null
+                        }
+                    },
+                    title = {
+                        Text(
+                            text = if (currentLanguage == "vi") "Có bản cập nhật mới!" else "New Version Available!",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    },
+                    text = {
+                        Column {
+                            Text(
+                                text = "${if (currentLanguage == "vi") "Phiên bản mới" else "New version"}: ${info.latestVersion} (Hiện tại: ${AppPreferences.getAppVersion()})",
+                                color = Color(0xFF1CC749),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = info.message.ifBlank {
+                                    if (currentLanguage == "vi") "Vui lòng cập nhật ứng dụng lên phiên bản mới nhất." else "Please update the application to the latest version."
+                                },
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 14.sp
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                if (updateUrl.isNotBlank()) {
+                                    uriHandler.openUri(updateUrl)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF1CC749),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text(if (currentLanguage == "vi") "Cập nhật" else "Update")
+                        }
+                    },
+                    dismissButton = {
+                        if (!force) {
+                            TextButton(
+                                onClick = { updateInfo = null }
+                            ) {
+                                Text(
+                                    text = if (currentLanguage == "vi") "Để sau" else "Later",
+                                    color = Color.White.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    },
+                    containerColor = Color(0xFF20232D),
+                    shape = RoundedCornerShape(16.dp)
+                )
+            }
             }
         }
     }
@@ -310,4 +415,17 @@ fun FloatingBottomNavigation(
             }
         }
     }
+}
+
+fun isVersionNewer(current: String, latest: String): Boolean {
+    val currentParts = current.split(".").map { it.toIntOrNull() ?: 0 }
+    val latestParts = latest.split(".").map { it.toIntOrNull() ?: 0 }
+    val maxLength = maxOf(currentParts.size, latestParts.size)
+    for (i in 0 until maxLength) {
+        val curr = currentParts.getOrNull(i) ?: 0
+        val lat = latestParts.getOrNull(i) ?: 0
+        if (lat > curr) return true
+        if (curr > lat) return false
+    }
+    return false
 }

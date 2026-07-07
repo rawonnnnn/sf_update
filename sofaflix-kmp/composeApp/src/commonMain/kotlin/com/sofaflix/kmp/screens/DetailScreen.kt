@@ -26,6 +26,8 @@ import coil3.compose.AsyncImage
 import com.sofaflix.kmp.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -36,7 +38,8 @@ fun DetailScreen(
     token: String,
     movieSlug: String,
     onBackClick: () -> Unit,
-    onPlayClick: (Movie, Episode, MovieDetail) -> Unit
+    onPlayClick: (Movie, Episode, MovieDetail) -> Unit,
+    onLoginRequired: (() -> Unit)? = null
 ) {
     var detail by remember { mutableStateOf<MovieDetail?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -47,6 +50,7 @@ fun DetailScreen(
     
     var activeServerIndex by remember { mutableStateOf(0) }
     var showServerPicker by remember { mutableStateOf(false) }
+    var showLoginRequiredDialog by remember { mutableStateOf(false) }
 
     // Comments states
     var commentsList by remember { mutableStateOf<List<JsonElement>>(emptyList()) }
@@ -314,8 +318,10 @@ fun DetailScreen(
                                             .background(Color.White.copy(alpha = 0.14f))
                                             .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(24.dp))
                                             .clickable {
-                                                isFav = StorageHelpers.toggleFavorite(movie)
-                                                if (token.isNotBlank()) {
+                                                if (token.isBlank()) {
+                                                    showLoginRequiredDialog = true
+                                                } else {
+                                                    isFav = StorageHelpers.toggleFavorite(movie)
                                                     scope.launch {
                                                         try {
                                                             api.toggleFavorite(
@@ -602,6 +608,44 @@ fun DetailScreen(
             confirmButton = {}
         )
     }
+
+    if (showLoginRequiredDialog) {
+        AlertDialog(
+            onDismissRequest = { showLoginRequiredDialog = false },
+            title = {
+                Text(
+                    text = if (lang == "vi") "Yêu cầu đăng nhập" else "Login Required",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text(
+                    text = if (lang == "vi") "Vui lòng đăng nhập tài khoản để sử dụng tính năng lưu phim yêu thích."
+                           else "Please log in to save your favorite movies.",
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 14.sp
+                )
+            },
+            containerColor = Color(0xFF1F222B),
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLoginRequiredDialog = false
+                        onLoginRequired?.invoke()
+                    }
+                ) {
+                    Text(if (lang == "vi") "Đăng nhập ngay" else "Login Now", color = Color(0xFF1CC749), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLoginRequiredDialog = false }) {
+                    Text(if (lang == "vi") "Đóng" else "Close", color = Color.White.copy(alpha = 0.6f))
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -699,6 +743,8 @@ fun CommentsSection(
     onSubmitComment: () -> Unit
 ) {
     val lang = LocalLanguage.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -769,7 +815,11 @@ fun CommentsSection(
                     }
 
                     Button(
-                        onClick = onSubmitComment,
+                        onClick = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            onSubmitComment()
+                        },
                         enabled = !submitting && newCommentText.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF1CC749),

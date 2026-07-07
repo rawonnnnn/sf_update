@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -136,7 +137,13 @@ fun LibraryScreen(
         }
     }
     
+    var searchQuery by remember { mutableStateOf("") }
     val activeData = if (activeTab == "saved") favoritesList else historyList
+
+    val filteredData = remember(activeData, searchQuery) {
+        if (searchQuery.isBlank()) activeData
+        else activeData.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    }
     
     Box(
         modifier = Modifier
@@ -168,12 +175,49 @@ fun LibraryScreen(
                     TabPill(
                         label = Lang.t("saved", lang),
                         isActive = activeTab == "saved",
-                        onClick = { activeTab = "saved" }
+                        onClick = { activeTab = "saved"; searchQuery = "" }
                     )
                     TabPill(
                         label = Lang.t("history", lang),
                         isActive = activeTab == "history",
-                        onClick = { activeTab = "history" }
+                        onClick = { activeTab = "history"; searchQuery = "" }
+                    )
+                }
+
+                if (activeData.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text(if (lang == "vi") "Tìm kiếm phim..." else "Search movies...", color = Color.White.copy(alpha = 0.38f), fontSize = 14.sp) },
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = Color(0xFF20232D),
+                            unfocusedContainerColor = Color(0xFF20232D),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = Color.White.copy(alpha = 0.38f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -208,6 +252,21 @@ fun LibraryScreen(
                         )
                     }
                 }
+            } else if (filteredData.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (lang == "vi") "Không tìm thấy kết quả phù hợp" else "No matching results found",
+                        color = Color.White.copy(alpha = 0.48f),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                }
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
@@ -216,8 +275,8 @@ fun LibraryScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    items(activeData.size) { index ->
-                        val movie = activeData[index]
+                    items(filteredData.size) { index ->
+                        val movie = filteredData[index]
                         LibraryGridItem(
                             movie = movie,
                             showDelete = true,

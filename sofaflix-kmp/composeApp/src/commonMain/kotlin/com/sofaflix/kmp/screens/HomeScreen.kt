@@ -177,7 +177,7 @@ fun HomeScreen(
                     }
                 }
                 
-                InterestCategories(onCategoryClick = onCategoryClick)
+                InterestCategories(api = api, onCategoryClick = onCategoryClick)
                 
                 TopChart(movies = homeData.hot, onMovieClick = onMovieClick)
                 
@@ -320,18 +320,21 @@ data class CategoryUi(
 )
 
 @Composable
-fun InterestCategories(onCategoryClick: (name: String, kind: String, slug: String) -> Unit) {
+fun InterestCategories(
+    api: SofaFlixApi,
+    onCategoryClick: (name: String, kind: String, slug: String) -> Unit
+) {
     val lang = LocalLanguage.current
-    val items = remember(lang) {
+    val items = remember(lang, api.baseUrl) {
         listOf(
-            CategoryUi(if (lang == "vi") "Hot Rần Rần" else "Trending", "country", "trung-quoc", "https://sofaflix.top/images/chu-de.webp", Color(0xFFF472B6)),
-            CategoryUi(if (lang == "vi") "Hàn Quốc" else "Korean", "country", "han-quoc", "https://sofaflix.top/images/chieu-rap.webp", Color(0xFFFB923C)),
-            CategoryUi(if (lang == "vi") "Lồng Tiếng" else "Dubbed", "genre", "long-tieng", "https://sofaflix.top/images/long-tieng.webp", Color(0xFFFACC15)),
-            CategoryUi(if (lang == "vi") "Thuyết Minh" else "Subbed", "genre", "thuyet-minh", "https://sofaflix.top/images/thuyet-minh.webp", Color(0xFF60A5FA)),
-            CategoryUi(if (lang == "vi") "Cổ Trang" else "Historical", "genre", "co-trang", "https://sofaflix.top/images/co-trang.webp", Color(0xFF34D399)),
-            CategoryUi(if (lang == "vi") "Kinh Dị" else "Horror", "genre", "kinh-di", "https://sofaflix.top/images/kinh-di.webp", Color(0xFFA78BFA)),
-            CategoryUi(if (lang == "vi") "Âu Mỹ" else "Western", "country", "au-my", "https://sofaflix.top/images/dien-anh-au-my.webp", Color(0xFFBEF264)),
-            CategoryUi(if (lang == "vi") "Hoạt Hình" else "Animation", "genre", "hoat-hinh", "https://sofaflix.top/images/hoat-hinh.webp", Color(0xFF2DD4BF))
+            CategoryUi(if (lang == "vi") "Hot Rần Rần" else "Trending", "country", "trung-quoc", "${api.baseUrl}/images/chu-de.webp", Color(0xFFF472B6)),
+            CategoryUi(if (lang == "vi") "Hàn Quốc" else "Korean", "country", "han-quoc", "${api.baseUrl}/images/chieu-rap.webp", Color(0xFFFB923C)),
+            CategoryUi(if (lang == "vi") "Lồng Tiếng" else "Dubbed", "genre", "long-tieng", "${api.baseUrl}/images/long-tieng.webp", Color(0xFFFACC15)),
+            CategoryUi(if (lang == "vi") "Thuyết Minh" else "Subbed", "genre", "thuyet-minh", "${api.baseUrl}/images/thuyet-minh.webp", Color(0xFF60A5FA)),
+            CategoryUi(if (lang == "vi") "Cổ Trang" else "Historical", "genre", "co-trang", "${api.baseUrl}/images/co-trang.webp", Color(0xFF34D399)),
+            CategoryUi(if (lang == "vi") "Kinh Dị" else "Horror", "genre", "kinh-di", "${api.baseUrl}/images/kinh-di.webp", Color(0xFFA78BFA)),
+            CategoryUi(if (lang == "vi") "Âu Mỹ" else "Western", "country", "au-my", "${api.baseUrl}/images/dien-anh-au-my.webp", Color(0xFFBEF264)),
+            CategoryUi(if (lang == "vi") "Hoạt Hình" else "Animation", "genre", "hoat-hinh", "${api.baseUrl}/images/hoat-hinh.webp", Color(0xFF2DD4BF))
         )
     }
     

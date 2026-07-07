@@ -18,6 +18,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -484,6 +487,7 @@ fun AuthContent(
     onLoginSuccess: (String, String) -> Unit
 ) {
     val lang = LocalLanguage.current
+    val focusManager = LocalFocusManager.current
     var isLoginTab by remember { mutableStateOf(true) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -497,6 +501,7 @@ fun AuthContent(
     val scope = rememberCoroutineScope()
     
     fun handleAuth() {
+        focusManager.clearFocus()
         errorMsg = null
         successMsg = null
         
@@ -687,7 +692,9 @@ fun AuthContent(
                         onValueChange = { password = it },
                         placeholder = Lang.t("placeholder_password", lang),
                         icon = Icons.Default.Lock,
-                        isPassword = true
+                        isPassword = true,
+                        imeAction = ImeAction.Done,
+                        onAction = { handleAuth() }
                     )
                     
                     Spacer(modifier = Modifier.height(24.dp))
@@ -752,8 +759,11 @@ fun AuthTextField(
     onValueChange: (String) -> Unit,
     placeholder: String,
     icon: ImageVector,
-    isPassword: Boolean = false
+    isPassword: Boolean = false,
+    imeAction: ImeAction = ImeAction.Next,
+    onAction: (() -> Unit)? = null
 ) {
+    val focusManager = LocalFocusManager.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -781,7 +791,19 @@ fun AuthTextField(
                     fontSize = 15.sp
                 ),
                 visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                keyboardOptions = if (isPassword) KeyboardOptions(keyboardType = KeyboardType.Password) else KeyboardOptions.Default,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Text,
+                    imeAction = imeAction
+                ),
+                keyboardActions = KeyboardActions(
+                    onAny = {
+                        if (onAction != null) {
+                            onAction()
+                        } else if (imeAction == ImeAction.Done) {
+                            focusManager.clearFocus()
+                        }
+                    }
+                ),
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 10.dp)

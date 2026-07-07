@@ -16,4 +16,14 @@ actual object AppPreferences {
         NSUserDefaults.standardUserDefaults.removeObjectForKey(key)
         NSUserDefaults.standardUserDefaults.synchronize()
     }
+
+    actual fun getAppVersion(): String {
+        return platform.Foundation.NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString")?.toString() ?: "1.0.0"
+    }
+
+    actual fun getAppVersionCode(): Int {
+        return platform.Foundation.NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleVersion")?.toString()?.toIntOrNull() ?: 1
+    }
+
+    actual fun getPlatform(): String = "ios"
 }
