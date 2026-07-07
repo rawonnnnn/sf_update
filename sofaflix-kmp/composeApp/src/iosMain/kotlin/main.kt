@@ -1,3 +1,4 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 package com.sofaflix.kmp
 
 import androidx.compose.ui.window.ComposeUIViewController
@@ -31,11 +32,12 @@ class MainComposeViewController(
         return orientation == UIInterfaceOrientationLandscapeLeft || orientation == UIInterfaceOrientationLandscapeRight
     }
 
-    override fun prefersHomeIndicatorAutoHidden(): Boolean {
-        val app = UIApplication.sharedApplication
-        val orientation = app.statusBarOrientation
-        return orientation == UIInterfaceOrientationLandscapeLeft || orientation == UIInterfaceOrientationLandscapeRight
-    }
+    override val prefersHomeIndicatorAutoHidden: Boolean
+        get() {
+            val app = UIApplication.sharedApplication
+            val orientation = app.statusBarOrientation
+            return orientation == UIInterfaceOrientationLandscapeLeft || orientation == UIInterfaceOrientationLandscapeRight
+        }
 }
 
 fun MainViewController(): UIViewController {

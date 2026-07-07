@@ -13,13 +13,14 @@ import platform.UIKit.UIWindowScene
 import platform.UIKit.UIWindowSceneGeometryPreferencesIOS
 import platform.Foundation.NSNumber
 import platform.Foundation.numberWithInteger
+import platform.Foundation.setValue
 
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 @Composable
 actual fun SetScreenOrientation(isLandscape: Boolean) {
     LaunchedEffect(isLandscape) {
         val app = UIApplication.sharedApplication
-        val windowScene = app.connectedScenes.allObjects.firstOrNull() as? UIWindowScene
+        val windowScene = app.connectedScenes.firstOrNull() as? UIWindowScene
         if (windowScene != null) {
             val mask = if (isLandscape) {
                 UIInterfaceOrientationMaskLandscapeRight
@@ -46,7 +47,7 @@ actual fun SetScreenOrientation(isLandscape: Boolean) {
     DisposableEffect(Unit) {
         onDispose {
             val app = UIApplication.sharedApplication
-            val windowScene = app.connectedScenes.allObjects.firstOrNull() as? UIWindowScene
+            val windowScene = app.connectedScenes.firstOrNull() as? UIWindowScene
             if (windowScene != null) {
                 val preferences = UIWindowSceneGeometryPreferencesIOS(UIInterfaceOrientationMaskPortrait)
                 windowScene.requestGeometryUpdateWithPreferences(preferences) { error ->
