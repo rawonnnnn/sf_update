@@ -105,6 +105,14 @@ object StorageHelpers {
         AppPreferences.putString("sf:watched_episodes:$slug", jsonStr)
     }
 
+    fun getLastServerName(slug: String): String {
+        return AppPreferences.getString("sf:last_server:$slug", "")
+    }
+
+    fun saveLastServerName(slug: String, serverName: String) {
+        AppPreferences.putString("sf:last_server:$slug", serverName)
+    }
+
     fun clearCache() {
         AppPreferences.remove("sf:favorites")
         AppPreferences.remove("sf:watch_history")

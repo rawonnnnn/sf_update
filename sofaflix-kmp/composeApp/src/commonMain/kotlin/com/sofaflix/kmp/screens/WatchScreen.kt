@@ -33,7 +33,11 @@ fun WatchScreen(
 ) {
     val lang = LocalLanguage.current
     var activeEpisode by remember { mutableStateOf(initialEpisode) }
-    var activeServerIndex by remember { mutableStateOf(0) }
+    var activeServerIndex by remember {
+        val savedServerName = StorageHelpers.getLastServerName(movie.slug)
+        val savedIdx = movieDetail.servers.indexOfFirst { it.name == savedServerName }
+        mutableStateOf(if (savedIdx >= 0) savedIdx else 0)
+    }
     var showServerPicker by remember { mutableStateOf(false) }
 
     val currentServer = remember(movieDetail, activeServerIndex) {
@@ -60,6 +64,7 @@ fun WatchScreen(
     LaunchedEffect(movie.slug, activeEpisode) {
         StorageHelpers.addToHistory(movie, activeEpisode.name)
         StorageHelpers.markEpisodeWatched(movie.slug, activeEpisode.name)
+        currentServer?.let { StorageHelpers.saveLastServerName(movie.slug, it.name) }
         if (token.isNotBlank()) {
             try {
                 api.addToHistory(
@@ -183,6 +188,25 @@ fun WatchScreen(
                     },
                     modifier = Modifier.fillMaxSize()
                 )
+
+                // Native floating fullscreen button overlay for Embed Server (third-party players)
+                if (activeEpisode.streamUrl.isBlank() && activeEpisode.embedUrl.isNotBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(16.dp)
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
+                            .clickable {
+                                isFullscreen = !isFullscreen
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        FullscreenIcon(isFullscreen = isFullscreen)
+                    }
+                }
             }
 
             // 3. Bottom scrollable content
@@ -228,6 +252,20 @@ fun WatchScreen(
 
                 // Servers and episodes
                 if (movieDetail.servers.isNotEmpty() && currentServer != null) {
+                    val episodes = currentServer.episodes
+                    val chunkSize = 30
+                    val hasChunks = episodes.size > chunkSize
+                    var selectedChunkIndex by remember(currentServer) {
+                        val activeIdx = episodes.indexOfFirst { it.name == activeEpisode.name }
+                        mutableStateOf(if (activeIdx >= 0) activeIdx / chunkSize else 0)
+                    }
+                    val visibleEpisodes = if (hasChunks) {
+                        val start = selectedChunkIndex * chunkSize
+                        episodes.subList(start, minOf(start + chunkSize, episodes.size))
+                    } else {
+                        episodes
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -242,125 +280,135 @@ fun WatchScreen(
                             fontWeight = FontWeight.Bold
                         )
                         
-                        if (movieDetail.servers.size > 1) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(Color.White.copy(alpha = 0.08f))
-                                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
-                                    .clickable { showServerPicker = true }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (movieDetail.servers.size > 1) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(Color.White.copy(alpha = 0.08f))
+                                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                                        .clickable { showServerPicker = true }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = currentServer.name,
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "  ˅",
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Range selector for many episodes
+                    if (hasChunks) {
+                        val totalChunks = (episodes.size + chunkSize - 1) / chunkSize
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 10.dp)
+                        ) {
+                            items(totalChunks) { chunkIdx ->
+                                val start = chunkIdx * chunkSize + 1
+                                val end = minOf((chunkIdx + 1) * chunkSize, episodes.size)
+                                val isSelected = chunkIdx == selectedChunkIndex
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            if (isSelected) Color(0xFF1CC749) else Color.White.copy(alpha = 0.07f)
+                                        )
+                                        .clickable { selectedChunkIndex = chunkIdx }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
                                     Text(
-                                        text = currentServer.name,
-                                        color = Color.White,
+                                        text = "$start–$end",
+                                        color = if (isSelected) Color.Black else Color.White.copy(alpha = 0.7f),
                                         fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "  ˅",
-                                        color = Color.White,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                     )
                                 }
                             }
                         }
                     }
 
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    // Compact episode chip grid
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(currentServer.episodes.size) { epIndex ->
-                            val ep = currentServer.episodes[epIndex]
+                        visibleEpisodes.forEach { ep ->
                             val isActive = ep.name == activeEpisode.name
                             val watched = watchedSet.contains(ep.name)
-                            
-                            Column(
+                            val globalIndex = episodes.indexOf(ep)
+                            val displayName = ep.name.ifBlank {
+                                if (lang == "vi") "Tập ${globalIndex + 1}" else "Ep ${globalIndex + 1}"
+                            }
+
+                            Box(
                                 modifier = Modifier
-                                    .width(152.dp)
-                                    .clickable {
-                                        if (!isActive) {
-                                            activeEpisode = ep
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        when {
+                                            isActive -> Color(0xFF1CC749)
+                                            watched -> Color.White.copy(alpha = 0.12f)
+                                            else -> Color.White.copy(alpha = 0.06f)
                                         }
-                                    }
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(152.dp, 86.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(
-                                            if (isActive) Color.Transparent else Color.White.copy(alpha = 0.05f)
-                                        )
-                                        .border(
-                                            width = if (isActive) 2.dp else 1.dp,
-                                            color = if (isActive) Color.White else Color.White.copy(alpha = 0.1f),
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                ) {
-                                    AsyncImage(
-                                        model = movie.posterUrl.ifBlank { movie.thumbUrl },
-                                        contentDescription = ep.name,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
                                     )
-                                    
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                Brush.verticalGradient(
-                                                    colors = listOf(
-                                                        Color.Black.copy(alpha = 0.1f),
-                                                        Color.Black.copy(alpha = 0.5f)
-                                                    )
-                                                )
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
+                                    .border(
+                                        width = 1.dp,
+                                        color = when {
+                                            isActive -> Color(0xFF1CC749)
+                                            watched -> Color.White.copy(alpha = 0.18f)
+                                            else -> Color.White.copy(alpha = 0.08f)
+                                        },
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable {
+                                        if (!isActive) activeEpisode = ep
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    if (watched && !isActive) {
                                         Text(
-                                            text = "▶",
-                                            color = if (isActive) Color(0xFF1CC749) else Color.White.copy(alpha = 0.86f),
-                                            fontSize = 20.sp,
+                                            text = "✓",
+                                            color = Color(0xFF1CC749),
+                                            fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
-
-                                    if (watched && !isActive) {
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.TopStart)
-                                                .padding(6.dp)
-                                                .background(
-                                                    color = Color.Black.copy(alpha = 0.76f),
-                                                    shape = RoundedCornerShape(4.dp)
-                                                )
-                                                .border(
-                                                    width = 1.dp,
-                                                    color = Color.White.copy(alpha = 0.25f),
-                                                    shape = RoundedCornerShape(4.dp)
-                                                )
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text("✓ ", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                Text(Lang.t("watched", lang), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    }
+                                    Text(
+                                        text = displayName,
+                                        color = when {
+                                            isActive -> Color.Black
+                                            else -> Color.White.copy(alpha = 0.85f)
+                                        },
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                                        maxLines = 1
+                                    )
                                 }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = ep.name.ifBlank { if (lang == "vi") "Tập ${epIndex + 1}" else "Episode ${epIndex + 1}" },
-                                    color = if (isActive) Color.White else Color(0xFFA7ADBA),
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
                             }
                         }
                     }
@@ -430,5 +478,51 @@ fun WatchScreen(
             },
             confirmButton = {}
         )
+    }
+}
+
+@Composable
+private fun FullscreenIcon(isFullscreen: Boolean) {
+    androidx.compose.foundation.Canvas(modifier = Modifier.size(18.dp)) {
+        val w = size.width
+        val h = size.height
+        val strokeWidth = 2.dp.toPx()
+        val len = 5.dp.toPx()
+        
+        if (isFullscreen) {
+            // Exit fullscreen: corners pointing inward
+            // Top-left
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(0f, len), end = androidx.compose.ui.geometry.Offset(len, len), strokeWidth = strokeWidth)
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(len, 0f), end = androidx.compose.ui.geometry.Offset(len, len), strokeWidth = strokeWidth)
+            
+            // Top-right
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(w - len, len), end = androidx.compose.ui.geometry.Offset(w, len), strokeWidth = strokeWidth)
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(w - len, 0f), end = androidx.compose.ui.geometry.Offset(w - len, len), strokeWidth = strokeWidth)
+            
+            // Bottom-left
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(0f, h - len), end = androidx.compose.ui.geometry.Offset(len, h - len), strokeWidth = strokeWidth)
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(len, h), end = androidx.compose.ui.geometry.Offset(len, h - len), strokeWidth = strokeWidth)
+            
+            // Bottom-right
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(w - len, h - len), end = androidx.compose.ui.geometry.Offset(w, h - len), strokeWidth = strokeWidth)
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(w - len, h), end = androidx.compose.ui.geometry.Offset(w - len, h - len), strokeWidth = strokeWidth)
+        } else {
+            // Enter fullscreen: corners pointing outward
+            // Top-left
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(len, 0f), strokeWidth = strokeWidth)
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(0f, len), strokeWidth = strokeWidth)
+            
+            // Top-right
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(w - len, 0f), end = androidx.compose.ui.geometry.Offset(w, 0f), strokeWidth = strokeWidth)
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(w, 0f), end = androidx.compose.ui.geometry.Offset(w, len), strokeWidth = strokeWidth)
+            
+            // Bottom-left
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(0f, h), end = androidx.compose.ui.geometry.Offset(len, h), strokeWidth = strokeWidth)
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(0f, h - len), end = androidx.compose.ui.geometry.Offset(0f, h), strokeWidth = strokeWidth)
+            
+            // Bottom-right
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(w - len, h), end = androidx.compose.ui.geometry.Offset(w, h), strokeWidth = strokeWidth)
+            drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(w, h - len), end = androidx.compose.ui.geometry.Offset(w, h), strokeWidth = strokeWidth)
+        }
     }
 }

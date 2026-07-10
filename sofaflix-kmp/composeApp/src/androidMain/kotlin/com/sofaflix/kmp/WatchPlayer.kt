@@ -217,6 +217,9 @@ actual fun WatchPlayer(
                                         (it as? kotlinx.serialization.json.JsonPrimitive)?.doubleOrNull
                                     } ?: 0.0
                                     onUpdateProgress(currentTime, duration)
+                                } else if (action == "toggleFullscreen") {
+                                    val isFS = message.contains("\"isFullscreen\":true")
+                                    onToggleFullscreen(isFS)
                                 }
                             } catch (e: Exception) {
                                 e.printStackTrace()
@@ -253,6 +256,7 @@ actual fun WatchPlayer(
                     }
                 }
             }
+            webView.evaluateJavascript("if (window.art) { window.art.fullscreenWeb = $isFullscreen; }", null)
         }
     )
 }
@@ -1025,7 +1029,7 @@ private fun generateArtplayerHtml(
             hotkey: true,
             pip: false,
             mutex: true,
-            fullscreen: true,
+            fullscreen: false,
             fullscreenWeb: true,
             subtitleOffset: false,
             miniProgressBar: false,
@@ -1229,6 +1233,10 @@ private fun generateArtplayerHtml(
             if (art.duration) {
               postMessageToApp('updateProgress', { currentTime: art.currentTime, duration: art.duration });
             }
+          });
+
+          art.on('fullscreenWeb', (state) => {
+            postMessageToApp('toggleFullscreen', { isFullscreen: state });
           });
         }
 

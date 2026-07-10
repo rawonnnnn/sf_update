@@ -51,6 +51,14 @@ fun App() {
     var searchCategoryKind by remember { mutableStateOf<String?>(null) }
     var searchCategoryName by remember { mutableStateOf<String?>(null) }
 
+    // Hoisted search filter state (persists across navigation)
+    var searchQuery by remember { mutableStateOf("") }
+    var searchSelectedType by remember { mutableStateOf("all") }
+    var searchSelectedGenre by remember { mutableStateOf("") }
+    var searchSelectedCountry by remember { mutableStateOf("") }
+    var searchSelectedYear by remember { mutableStateOf("") }
+    var searchFiltersExpanded by remember { mutableStateOf(false) }
+
     var token by remember { mutableStateOf("") }
     var userProfileName by remember { mutableStateOf("") }
 
@@ -209,7 +217,19 @@ fun App() {
                             initialCategorySlug = searchCategorySlug,
                             initialCategoryKind = searchCategoryKind,
                             initialCategoryName = searchCategoryName,
-                            onMovieClick = { selectedMovieSlug = it }
+                            onMovieClick = { selectedMovieSlug = it },
+                            query = searchQuery,
+                            onQueryChange = { searchQuery = it },
+                            selectedType = searchSelectedType,
+                            onSelectedTypeChange = { searchSelectedType = it },
+                            selectedGenre = searchSelectedGenre,
+                            onSelectedGenreChange = { searchSelectedGenre = it },
+                            selectedCountry = searchSelectedCountry,
+                            onSelectedCountryChange = { searchSelectedCountry = it },
+                            selectedYear = searchSelectedYear,
+                            onSelectedYearChange = { searchSelectedYear = it },
+                            isFiltersExpanded = searchFiltersExpanded,
+                            onFiltersExpandedChange = { searchFiltersExpanded = it }
                         )
                         Screen.Library -> LibraryScreen(
                             api = api,

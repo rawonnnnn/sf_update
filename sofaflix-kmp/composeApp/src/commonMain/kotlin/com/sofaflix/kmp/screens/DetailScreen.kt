@@ -266,12 +266,25 @@ fun DetailScreen(
                                         onClick = {
                                             val lastWatchedEpName = StorageHelpers.getWatchHistory()
                                                 .find { it.slug == movie.slug }?.episode
-                                            val ep = if (!lastWatchedEpName.isNullOrBlank()) {
-                                                movieDetail.servers.flatMap { it.episodes }
+                                            val savedServerName = StorageHelpers.getLastServerName(movie.slug)
+                                            
+                                            // Find the saved server first
+                                            val savedServerIdx = if (savedServerName.isNotBlank()) {
+                                                movieDetail.servers.indexOfFirst { it.name == savedServerName }
+                                            } else -1
+                                            val targetServerIdx = if (savedServerIdx >= 0) savedServerIdx else 0
+                                            val targetServer = movieDetail.servers.getOrNull(targetServerIdx)
+                                            
+                                            // Set the active server index so DetailScreen shows the correct server
+                                            activeServerIndex = targetServerIdx
+                                            
+                                            val ep = if (!lastWatchedEpName.isNullOrBlank() && targetServer != null) {
+                                                targetServer.episodes
                                                     .find { it.name.trim().lowercase() == lastWatchedEpName.trim().lowercase() }
+                                                    ?: targetServer.episodes.firstOrNull()
                                                     ?: movieDetail.firstEpisode
                                             } else {
-                                                movieDetail.firstEpisode
+                                                targetServer?.episodes?.firstOrNull() ?: movieDetail.firstEpisode
                                             }
                                             
                                             if (ep != null) {
@@ -427,6 +440,31 @@ fun DetailScreen(
                             if (movieDetail.servers.isNotEmpty()) {
                                 val currentServer = movieDetail.servers.getOrNull(activeServerIndex)
                                 if (currentServer != null) {
+                                    val episodes = currentServer.episodes
+                                    val chunkSize = 30
+                                    val hasChunks = episodes.size > chunkSize
+                                    
+                                    // Use remember with keys so state resets appropriately on movie/server changes
+                                    var selectedChunkIndex by remember(movie.slug, activeServerIndex) {
+                                        // Calculate the chunk index where the last watched episode resides
+                                        val lastWatchedEp = watchedSet.firstOrNull()
+                                        val watchedIndex = if (lastWatchedEp != null) {
+                                            episodes.indexOfFirst { it.name == lastWatchedEp }
+                                        } else -1
+                                        val initialChunk = if (watchedIndex >= 0) watchedIndex / chunkSize else 0
+                                        mutableStateOf(initialChunk)
+                                    }
+                                    
+                                    val visibleEpisodes = remember(episodes, selectedChunkIndex, hasChunks) {
+                                        if (hasChunks) {
+                                            val start = selectedChunkIndex * chunkSize
+                                            val end = minOf(start + chunkSize, episodes.size)
+                                            episodes.subList(start, end)
+                                        } else {
+                                            episodes
+                                        }
+                                    }
+
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -454,17 +492,64 @@ fun DetailScreen(
                                         }
                                     }
                                     
-                                    LazyRow(
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    // Range selector for many episodes
+                                    if (hasChunks) {
+                                        val totalChunks = (episodes.size + chunkSize - 1) / chunkSize
+                                        LazyRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 10.dp)
+                                        ) {
+                                            items(totalChunks) { chunkIdx ->
+                                                val start = chunkIdx * chunkSize + 1
+                                                val end = minOf((chunkIdx + 1) * chunkSize, episodes.size)
+                                                val isSelected = chunkIdx == selectedChunkIndex
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(
+                                                            if (isSelected) Color(0xFF1CC749) else Color.White.copy(alpha = 0.07f)
+                                                        )
+                                                        .clickable { selectedChunkIndex = chunkIdx }
+                                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "$start–$end",
+                                                        color = if (isSelected) Color.Black else Color.White.copy(alpha = 0.7f),
+                                                        fontSize = 12.sp,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Compact episode chip grid
+                                    @OptIn(ExperimentalLayoutApi::class)
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        items(currentServer.episodes.size) { epIndex ->
-                                            val ep = currentServer.episodes[epIndex]
+                                        visibleEpisodes.forEach { ep ->
                                             val watched = watchedSet.contains(ep.name)
-                                            
-                                            Column(
+                                            val globalIndex = episodes.indexOf(ep)
+                                            val displayName = ep.name.ifBlank {
+                                                if (lang == "vi") "Tập ${globalIndex + 1}" else "Ep ${globalIndex + 1}"
+                                            }
+
+                                            Box(
                                                 modifier = Modifier
-                                                    .width(172.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(
+                                                        if (watched) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.06f)
+                                                    )
+                                                    .border(
+                                                        width = 1.dp,
+                                                        color = if (watched) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.08f),
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    )
                                                     .clickable {
                                                         StorageHelpers.addToHistory(movie, ep.name)
                                                         if (token.isNotBlank()) {
@@ -483,55 +568,29 @@ fun DetailScreen(
                                                         }
                                                         onPlayClick(movie, ep, movieDetail)
                                                     }
+                                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(172.dp, 98.dp)
-                                                        .clip(RoundedCornerShape(8.dp))
-                                                        .background(Color.White.copy(alpha = 0.05f))
-                                                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                                                 ) {
-                                                    AsyncImage(
-                                                        model = movie.posterUrl.ifBlank { movie.thumbUrl },
-                                                        contentDescription = ep.name,
-                                                        contentScale = ContentScale.Crop,
-                                                        modifier = Modifier.fillMaxSize()
-                                                    )
-                                                    
-                                                    // Dark overlay & play button
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .fillMaxSize()
-                                                            .background(Color.Black.copy(alpha = 0.3f)),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        Text("▶", color = Color.White.copy(alpha = 0.86f), fontSize = 22.sp)
-                                                    }
-                                                    
                                                     if (watched) {
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .align(Alignment.TopStart)
-                                                                .padding(6.dp)
-                                                                .clip(RoundedCornerShape(4.dp))
-                                                                .background(Color.Black.copy(alpha = 0.76f))
-                                                                .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(4.dp))
-                                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                        ) {
-                                                            Text("✓ " + Lang.t("watched", lang), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                        }
+                                                        Text(
+                                                            text = "✓",
+                                                            color = Color(0xFF1CC749),
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
                                                     }
+                                                    Text(
+                                                        text = displayName,
+                                                        color = Color.White.copy(alpha = 0.85f),
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.Normal,
+                                                        maxLines = 1
+                                                    )
                                                 }
-                                                
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                Text(
-                                                    text = ep.name.ifBlank { if (lang == "vi") "Tập ${epIndex + 1}" else "Episode ${epIndex + 1}" },
-                                                    color = Color.White,
-                                                    fontSize = 12.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
                                             }
                                         }
                                     }

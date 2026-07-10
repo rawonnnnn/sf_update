@@ -43,18 +43,23 @@ fun SearchScreen(
     initialCategorySlug: String?,
     initialCategoryKind: String?,
     initialCategoryName: String?,
-    onMovieClick: (String) -> Unit
+    onMovieClick: (String) -> Unit,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    selectedType: String,
+    onSelectedTypeChange: (String) -> Unit,
+    selectedGenre: String,
+    onSelectedGenreChange: (String) -> Unit,
+    selectedCountry: String,
+    onSelectedCountryChange: (String) -> Unit,
+    selectedYear: String,
+    onSelectedYearChange: (String) -> Unit,
+    isFiltersExpanded: Boolean,
+    onFiltersExpandedChange: (Boolean) -> Unit
 ) {
     val lang = LocalLanguage.current
     val focusManager = LocalFocusManager.current
-    var query by remember { mutableStateOf("") }
-    var debouncedQuery by remember { mutableStateOf("") }
-    
-    // Filters state
-    var selectedType by remember { mutableStateOf("all") } // all, single, series
-    var selectedGenre by remember { mutableStateOf("") }
-    var selectedCountry by remember { mutableStateOf("") }
-    var selectedYear by remember { mutableStateOf("") }
+    var debouncedQuery by remember { mutableStateOf(query) }
     
     // Options lists
     var allGenres by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
@@ -70,38 +75,35 @@ fun SearchScreen(
     var loading by remember { mutableStateOf(false) }
     var hasMore by remember { mutableStateOf(true) }
     
-    // Filter collapse/expand state
-    var isFiltersExpanded by remember { mutableStateOf(false) }
-    
     val scope = rememberCoroutineScope()
     
     // Handle initial category parameters (when navigated from HomeScreen)
     LaunchedEffect(initialCategorySlug, initialCategoryKind) {
         if (initialCategorySlug != null) {
-            query = ""
+            onQueryChange("")
             debouncedQuery = ""
-            isFiltersExpanded = true
+            onFiltersExpandedChange(true)
             when (initialCategoryKind) {
                 "genre" -> {
-                    selectedGenre = initialCategorySlug
-                    selectedCountry = ""
-                    selectedYear = ""
-                    selectedType = "all"
+                    onSelectedGenreChange(initialCategorySlug)
+                    onSelectedCountryChange("")
+                    onSelectedYearChange("")
+                    onSelectedTypeChange("all")
                 }
                 "country" -> {
-                    selectedGenre = ""
-                    selectedCountry = initialCategorySlug
-                    selectedYear = ""
-                    selectedType = "all"
+                    onSelectedGenreChange("")
+                    onSelectedCountryChange(initialCategorySlug)
+                    onSelectedYearChange("")
+                    onSelectedTypeChange("all")
                 }
                 "list" -> {
-                    selectedGenre = ""
-                    selectedCountry = ""
-                    selectedYear = ""
-                    selectedType = "all"
+                    onSelectedGenreChange("")
+                    onSelectedCountryChange("")
+                    onSelectedYearChange("")
+                    onSelectedTypeChange("all")
                     // If it is list type, slug might be phim-le or phim-bo or phim-hot
-                    if (initialCategorySlug == "phim-le") selectedType = "single"
-                    else if (initialCategorySlug == "phim-bo") selectedType = "series"
+                    if (initialCategorySlug == "phim-le") onSelectedTypeChange("single")
+                    else if (initialCategorySlug == "phim-bo") onSelectedTypeChange("series")
                 }
             }
         }
@@ -272,7 +274,7 @@ fun SearchScreen(
                         
                         BasicTextField(
                             value = query,
-                            onValueChange = { query = it },
+                            onValueChange = onQueryChange,
                             textStyle = androidx.compose.ui.text.TextStyle(
                                 color = Color.White,
                                 fontSize = 15.sp,
@@ -294,7 +296,7 @@ fun SearchScreen(
                         
                         if (query.isNotEmpty()) {
                             IconButton(
-                                onClick = { query = "" },
+                                onClick = { onQueryChange("") },
                                 modifier = Modifier.size(24.dp)
                             ) {
                                 Icon(
@@ -319,7 +321,7 @@ fun SearchScreen(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .clickable { isFiltersExpanded = !isFiltersExpanded }
+                        .clickable { onFiltersExpandedChange(!isFiltersExpanded) }
                         .padding(top = 22.dp, bottom = 12.dp)
                 ) {
                     Text(
@@ -353,7 +355,7 @@ fun SearchScreen(
                                 FilterChip(
                                     label = name,
                                     isActive = selectedType == value,
-                                    onClick = { selectedType = value }
+                                    onClick = { onSelectedTypeChange(value) }
                                 )
                             }
                         }
@@ -363,13 +365,13 @@ fun SearchScreen(
                             FilterChip(
                                 label = if (lang == "vi") "Tất cả" else "All",
                                 isActive = selectedGenre.isEmpty(),
-                                onClick = { selectedGenre = "" }
+                                onClick = { onSelectedGenreChange("") }
                             )
                             allGenres.forEach { pair ->
                                 FilterChip(
                                     label = pair.first,
                                     isActive = selectedGenre == pair.second,
-                                    onClick = { selectedGenre = pair.second }
+                                    onClick = { onSelectedGenreChange(pair.second) }
                                 )
                             }
                         }
@@ -379,13 +381,13 @@ fun SearchScreen(
                             FilterChip(
                                 label = if (lang == "vi") "Tất cả" else "All",
                                 isActive = selectedCountry.isEmpty(),
-                                onClick = { selectedCountry = "" }
+                                onClick = { onSelectedCountryChange("") }
                             )
                             allCountries.forEach { pair ->
                                 FilterChip(
                                     label = pair.first,
                                     isActive = selectedCountry == pair.second,
-                                    onClick = { selectedCountry = pair.second }
+                                    onClick = { onSelectedCountryChange(pair.second) }
                                 )
                             }
                         }
@@ -395,13 +397,13 @@ fun SearchScreen(
                             FilterChip(
                                 label = if (lang == "vi") "Tất cả" else "All",
                                 isActive = selectedYear.isEmpty(),
-                                onClick = { selectedYear = "" }
+                                onClick = { onSelectedYearChange("") }
                             )
                             yearsList.forEach { yr ->
                                 FilterChip(
                                     label = yr,
                                     isActive = selectedYear == yr,
-                                    onClick = { selectedYear = yr }
+                                    onClick = { onSelectedYearChange(yr) }
                                 )
                             }
                         }
